@@ -59,11 +59,21 @@ export type PublicState = {
 	gamepassIncomeMultiplier: number,
 }
 
+type OfflineCredit = {
+	earned: number,
+	creditedSeconds: number,
+	elapsed: number,
+}
+
 local EconomyService = Knit.CreateService({
 	Name = "EconomyService",
 
 	-- The single place where player state lives
 	_states = {} :: { [Player]: PlayerState },
+
+	-- Held until the client calls GetState so late KnitStart subscribers still
+	-- see the welcome-back toast (a Fire on join can race the controller)
+	_pendingOffline = {} :: { [Player]: OfflineCredit },
 
 	-- Resolved in KnitStart; persistence is entirely DataService's business
 	_dataService = nil :: any,
@@ -71,6 +81,8 @@ local EconomyService = Knit.CreateService({
 	Client = {
 		-- The server pushes new state; the client never polls
 		StateChanged = Knit.CreateSignal(),
+		-- Delivered from GetState once offline income was credited this join
+		OfflineCredited = Knit.CreateSignal(),
 	},
 })
 
@@ -440,9 +452,31 @@ function EconomyService.Client:Prestige(player: Player)
 	return self.Server:Prestige(player)
 end
 
+function EconomyService:_deliverPendingOffline(player: Player)
+	local pending = self._pendingOffline[player]
+	if not pending then
+		return
+	end
+
+	self._pendingOffline[player] = nil
+	self.Client.OfflineCredited:Fire(
+		player,
+		pending.earned,
+		pending.creditedSeconds,
+		pending.elapsed
+	)
+end
+
 function EconomyService.Client:GetState(player: Player): PublicState?
 	local state = self.Server:_getState(player)
-	return if state then self.Server:_publicState(state) else nil
+	if not state then
+		return nil
+	end
+
+	-- Client connects OfflineCredited before GetState; delivering here avoids
+	-- the join race where Fire runs before the controller has subscribed
+	self.Server:_deliverPendingOffline(player)
+	return self.Server:_publicState(state)
 end
 
 --[[ Knit lifecycle ]]
@@ -457,12 +491,16 @@ end
 	The rate is taken from the profile as loaded, so offline income is paid
 	at the rate the player actually left with.
 ]]
-function EconomyService:_creditOffline(player: Player, data: Profile.Profile, state: PlayerState): number
+function EconomyService:_creditOffline(
+	player: Player,
+	data: Profile.Profile,
+	state: PlayerState
+): (number, number, number)
 	local elapsed, updated = Profile.consumeOfflineWindow(data, os.time())
 	data.lastSeen = updated.lastSeen
 
 	if elapsed <= 0 then
-		return 0
+		return 0, 0, 0
 	end
 
 	local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
@@ -477,7 +515,7 @@ function EconomyService:_creditOffline(player: Player, data: Profile.Profile, st
 	)
 
 	if earned <= 0 then
-		return 0
+		return 0, 0, elapsed
 	end
 
 	state.wallet:add(CURRENCY, earned)
@@ -488,7 +526,7 @@ function EconomyService:_creditOffline(player: Player, data: Profile.Profile, st
 			.. `for {math.floor(creditedSeconds)}s of {math.floor(elapsed)}s away`
 	)
 
-	return earned
+	return earned, creditedSeconds, elapsed
 end
 
 function EconomyService:KnitStart()
@@ -504,9 +542,16 @@ function EconomyService:KnitStart()
 			end
 
 			local state = stateFromProfile(data)
-			self:_creditOffline(player, data, state)
+			local earned, creditedSeconds, elapsed = self:_creditOffline(player, data, state)
 
 			self._states[player] = state
+			if earned > 0 then
+				self._pendingOffline[player] = {
+					earned = earned,
+					creditedSeconds = creditedSeconds,
+					elapsed = elapsed,
+				}
+			end
 			self:_push(player)
 		end)
 	end
@@ -532,6 +577,7 @@ function EconomyService:KnitStart()
 		end
 
 		self._states[player] = nil
+		self._pendingOffline[player] = nil
 	end)
 
 	task.spawn(function()

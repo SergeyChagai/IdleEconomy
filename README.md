@@ -3,14 +3,15 @@
 An idle-game economy system: currencies, exponential cost curves, prestige,
 offline income. The server owns all state and every remote is validated.
 
-The core is covered by **101 unit tests** that run from the console without
-Roblox Studio.
+The core is covered by console unit tests that run without Roblox Studio.
+GitHub Actions runs the same suite on every push and pull request
+(`.github/workflows/tests.yml`).
 
 ```bash
 test.bat
 ```
 
-Exit code `0` — green, `1` — failures, `127` — runtime not found. CI-ready.
+Exit code `0` — green, `1` — failures, `127` — runtime not found.
 
 Requires [Lune](https://github.com/lune-org/lune/releases), a standalone Luau
 runtime. The script looks for it on `PATH`, or at `LUNE_PATH`.
@@ -38,45 +39,35 @@ wally install
 
 ---
 
+## Docs
+
+| | |
+|---|---|
+| [Architecture](docs/architecture.md) | Layers, services, data model, ADRs |
+| [Monetisation setup](docs/monetisation.md) | Creator Dashboard ids + test-place checklist |
+| [Roadmap](docs/roadmap.md) | Sprint status |
+| [ADRs](docs/adr/) | Decisions (pure modules, ProcessReceipt, …) |
+
 ## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the current service map.
+Short tree:
 
 ```
 src/
   shared/Economy/          pure modules -- no require, no engine
-    EconomyConfig.luau       curves and balance constants
-    Balance.luau             math: prices, income, prestige, offline
-    Wallet.luau              OOP wallet class with validation
-    Validate.luau            remote input validation
-    RateLimiter.luau         token bucket against autoclickers
-    PurchaseLedger.luau      PurchaseId history for receipt idempotency
-    PurchaseAnalytics.luau   receipt event builders
-    MonetisationConfig.luau  product / gamepass catalog
-
-  server/
-    Bootstrap.server.luau    Knit service registration
-    Services/
-      EconomyService.luau    state owner, server API
-      DataService.luau       ProfileStore sessions
-      MonetisationService.luau ProcessReceipt + gamepass refresh
-
-  client/
-    Bootstrap.client.luau    Knit controller registration
-    Controllers/
-      EconomyController.luau UI, dispatches intent
+  server/Services/         Economy, Data, Monetisation (Knit)
+  client/Controllers/      EconomyController HUD (intent only)
 
 tests/
-  lib/TestRunner.luau        dependency-free describe/it/expect runner
-  Balance.spec.luau          38 tests
-  Wallet.spec.luau           25 tests
-  Validate.spec.luau         27 tests
-  RateLimiter.spec.luau      11 tests
-  run.luau                   Lune entry point
+  *.spec.luau              Lune console suite (test.bat / CI)
+  studio/                  TestEZ under test.project.json
 ```
 
 ### Why the modules in `shared/Economy` have no `require`
 
-This is the central architectural decision of the project. The pure modules
-pull in neither the engine nor each other -- the config arrives as an
+This is the central architectural decision of the project (ADR-0001). The pure
+modules pull in neither the engine nor each other -- the config arrives as an
 argument. That is what lets one and the same file load in Roblox and in
 **Lune**, which in turn means all of the math and all of the validation is
 tested from the console in half a second, without launching Studio.
@@ -160,20 +151,15 @@ Then in Studio: the `PLUGINS` tab → `Rojo` → `Connect` → `Play`.
 
 ---
 
-## What is deliberately missing
+## What is deliberately unfinished
 
-**Persistence.** `EconomyService:KnitStart` builds state from scratch; the
-places for profile load and save are marked in code. ProfileStore, key
-migration and backups are a separate system of comparable size.
+**Live catalog ids.** `MonetisationConfig` ships with zeros. Paste Creator
+Dashboard ids and verify on a test place — see
+[docs/monetisation.md](docs/monetisation.md).
 
-**Monetisation.** Developer products go through `MonetisationService` /
-`ProcessReceipt` with a PurchaseId ledger; gamepasses multiply income and can
-boost the offline window. Set real asset ids in `MonetisationConfig` (zeros are
-treated as unconfigured).
-
-**Server-layer tests.** Pure modules stay on the Lune runner (ADR-0004).
-Engine-bound services use TestEZ in Studio via `test.project.json` /
-`test-all.bat` (Sprint 5).
+**Studio TestEZ in CI.** Console suite is on GitHub Actions. Engine-bound
+specs still need `rojo serve test.project.json` + Play locally
+(`test-all.bat`).
 
 ---
 
