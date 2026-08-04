@@ -1,4 +1,4 @@
-# ADR-0002: Клиент присылает намерение, а не стоимость
+# ADR-0002: The client sends intent, not a price
 
 ## Status
 
@@ -6,44 +6,41 @@ Accepted (2026-08-04)
 
 ## Context
 
-Клиент в Roblox враждебен по умолчанию: эксплойтер вызывает ремоуты
-напрямую с любыми аргументами, минуя весь интерфейс. Всё, что клиент
-прислал, — это данные неизвестного происхождения, а не результат нажатия
-кнопки.
+A Roblox client is hostile by default: an exploiter calls remotes directly
+with arbitrary arguments, bypassing the interface entirely. Anything the
+client sends is data of unknown origin, not the result of pressing a button.
 
-Распространённая ошибка в тестовых заданиях — ремоут вида
-`BuyUpgrade(upgradeId, cost)` или `AddCoins(amount)`. Клиенту удобно:
-цена уже посчитана для отображения, зачем считать дважды. Но такой ремоут
-означает, что стоимость покупки назначает атакующий.
+A common mistake in take-home tasks is a remote shaped like
+`BuyUpgrade(upgradeId, cost)` or `AddCoins(amount)`. It is convenient: the
+price was already computed for display, so why compute it twice. But such a
+remote means the attacker sets the purchase price.
 
 ## Decision
 
-Ремоуты принимают только НАМЕРЕНИЕ: `BuyUpgrade(upgradeId, count)`.
-Стоимость, награду и результат считает исключительно сервер по своему
-конфигу.
+Remotes accept INTENT only: `BuyUpgrade(upgradeId, count)`. Price, reward and
+outcome are computed exclusively by the server from its own config.
 
-Каждый аргумент проходит `Validate` до использования: тип, диапазон,
-целочисленность, существование ключа. Проверка существования апгрейда
-идёт строго после проверки типа — индексировать таблицу произвольным
-значением от клиента нельзя.
+Every argument goes through `Validate` before use: type, range, integrality,
+key existence. The existence check runs strictly after the type check --
+indexing a table with an arbitrary client-supplied value is not acceptable.
 
-Локальная проверка «хватает ли денег» на клиенте остаётся, но только для
-подсветки кнопки. На неё ничего не завязано, сервер проверяет заново.
+The local affordability check on the client stays, but only to highlight a
+button. Nothing depends on it; the server re-checks.
 
 ## Consequences
 
-Положительные:
+Positive:
 
-* Подделка цены невозможна: клиент физически не участвует в её расчёте.
-* Валидация вынесена в чистый модуль и покрыта 27 тестами, написанными
-  с позиции атакующего.
-* Потолок `MAX_BATCH` защищает не баланс, а сервер: вызов с `count = 1e9`
-  подвесил бы всех игроков на сервере, а не одного.
+* Forging a price is impossible: the client takes no part in computing it.
+* Validation lives in a pure module and is covered by 27 tests written from
+  the attacker's seat.
+* The `MAX_BATCH` cap protects the server rather than the balance: a call with
+  `count = 1e9` would hang every player on the server, not just one.
 
-Отрицательные:
+Negative:
 
-* Цена считается дважды — на клиенте для UI и на сервере для списания.
-  Дублирование формулы устранено тем, что оба используют один модуль
-  `Balance`, но вызовов всё равно два.
-* Каждое действие требует круга до сервера, мгновенного отклика нет.
-  Для idle-игры это приемлемо; для шутера потребовалось бы предсказание.
+* The price is computed twice -- on the client for the UI and on the server
+  for the deduction. Formula duplication is avoided because both use the same
+  `Balance` module, but there are still two calls.
+* Every action costs a round trip to the server; there is no instant
+  feedback. Acceptable for an idle game; a shooter would need prediction.

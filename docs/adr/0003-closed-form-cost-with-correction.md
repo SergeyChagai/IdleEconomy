@@ -1,4 +1,4 @@
-# ADR-0003: Замкнутая формула стоимости с обязательной доводкой
+# ADR-0003: Closed-form cost with mandatory correction
 
 ## Status
 
@@ -6,52 +6,52 @@ Accepted (2026-08-04)
 
 ## Context
 
-Цена уровня растёт геометрически: `baseCost * costGrowth ^ level`.
-Отсюда две задачи:
+Level price grows geometrically: `baseCost * costGrowth ^ level`. That gives
+two problems:
 
-1. Сколько стоят N уровней подряд.
-2. Сколько уровней игрок может купить на имеющиеся деньги
-   (кнопка «купить максимум»).
+1. What N consecutive levels cost.
+2. How many levels the player can buy with the money they have
+   (the "buy max" button).
 
-Наивное решение — цикл. При покупке максимума за раз N доходит до сотен,
-и цикл выполняется на каждый клик каждого игрока.
+The naive solution is a loop. On "buy max" N reaches the hundreds, and the
+loop runs on every click of every player.
 
-Замкнутые формулы существуют: сумма геометрической прогрессии и её
-обращение через логарифм. Но у обращения есть известная беда — на больших
-числах логарифм ошибается в последнем разряде. Ошибка на единицу здесь
-означает либо недоданный уровень, либо уход баланса в минус.
+Closed forms exist: the geometric series sum and its inverse through a
+logarithm. But the inverse has a well-known flaw -- on large numbers the
+logarithm is wrong in the last digit. Off by one here means either a level
+the player paid for and did not get, or a balance driven negative.
 
-Отдельная ловушка: если округлять цену отдельного уровня «для красоты»,
-сумма серии перестаёт сходиться с суммой отдельных покупок. Игрок,
-купивший 10 уровней разом, заплатит не столько же, сколько купивший их
-по одному, и это находят в первый же день.
+A separate trap: rounding the price of an individual level "to look nice"
+makes the series sum stop matching the sum of individual purchases. A player
+who buys 10 levels at once pays a different amount than one who buys them one
+at a time, and that is found on day one.
 
 ## Decision
 
-Суммарная стоимость считается замкнутой формулой
-`S = a * (g^n - 1) / (g - 1)`, вырожденный случай `g = 1` обрабатывается
-отдельно.
+Total cost uses the closed form `S = a * (g^n - 1) / (g - 1)`, with the
+degenerate `g = 1` case handled separately.
 
-Количество доступных уровней считается через логарифм, после чего
-результат ОБЯЗАТЕЛЬНО доводится проверкой в обе стороны: пока купленное
-не по карману — шаг вниз, пока следующий уровень по карману — шаг вверх.
-Доводка стоит один-два шага и снимает весь класс ошибок округления.
+The affordable level count is computed through a logarithm, after which the
+result is ALWAYS corrected in both directions: step down while the purchase
+is unaffordable, step up while the next level is affordable. The correction
+costs one or two steps and removes the entire class of rounding bugs.
 
-Цены не округляются внутри модуля. Округление — только при отображении.
+Prices are not rounded inside the module. Rounding happens only on display.
 
 ## Consequences
 
-Положительные:
+Positive:
 
-* Покупка максимума не зависит от количества уровней по времени.
-* Инвариант «купленное по карману, а ещё один уровень — нет» проверяется
-  тестом на семи значениях баланса и четырёх стартовых уровнях.
-* Совпадение замкнутой формулы с поштучным сложением проверяется на
-  40 комбинациях с относительным допуском 1e-9.
+* "Buy max" runs in constant time regardless of the level count.
+* The invariant "what was bought is affordable, one more level is not" is
+  checked against seven balances and four starting levels.
+* Agreement between the closed form and level-by-level summation is checked
+  across 40 combinations with a relative tolerance of 1e-9.
 
-Отрицательные:
+Negative:
 
-* Код заметно сложнее цикла и требует комментариев, иначе доводка
-  выглядит как избыточная страховка и её «оптимизируют».
-* Формула не работает при `costGrowth = 1`; вырожденная ветка нужна
-  всегда, о ней легко забыть при копировании кода.
+* The code is noticeably more complex than a loop and needs comments;
+  otherwise the correction looks like redundant insurance and gets
+  "optimised" away.
+* The formula does not work at `costGrowth = 1`; the degenerate branch is
+  always required and is easy to forget when copying the code.

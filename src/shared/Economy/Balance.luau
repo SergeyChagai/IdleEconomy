@@ -1,13 +1,13 @@
 --!strict
 --[[
-	Математика экономики: цены, доход, престиж, оффлайн-начисления.
+	Economy math: prices, income, prestige, offline earnings.
 
-	Модуль намеренно оставлен ЧИСТЫМ:
-	  * нет require — грузится и в Roblox, и в Lune;
-	  * нет глобального состояния — конфиг приходит аргументом;
-	  * нет побочных эффектов — одни и те же входы дают один и тот же выход.
+	This module is deliberately PURE:
+	  * no `require` -- loads both in Roblox and in Lune;
+	  * no global state -- the config arrives as an argument;
+	  * no side effects -- the same inputs always give the same output.
 
-	Именно поэтому всё это покрывается юнит-тестами без запуска движка.
+	That is precisely what makes all of it unit-testable without the engine.
 ]]
 
 export type UpgradeConfig = {
@@ -21,20 +21,20 @@ export type UpgradeConfig = {
 
 local Balance = {}
 
---[[ Вспомогательное ]]
+--[[ Helpers ]]
 
 local function isFiniteNumber(value: number): boolean
-	-- NaN не равен сам себе; бесконечности отсекаем сравнением
+	-- NaN never equals itself; infinities are ruled out by comparison
 	return value == value and value ~= math.huge and value ~= -math.huge
 end
 
 --[[
-	Цена ОДНОГО следующего уровня.
+	Price of ONE next level.
 
-	Уровень 0 стоит baseCost, дальше умножается на costGrowth за каждый
-	купленный уровень. Возвращаем нецелое число специально: округление
-	делается только при показе. Если округлять здесь, сумма серии перестанет
-	сходиться с суммой отдельных покупок, и игрок поймает расхождение.
+	Level 0 costs baseCost, and every purchased level multiplies it by
+	costGrowth. The result is intentionally not rounded: rounding happens
+	only on display. Rounding here would stop the closed-form series from
+	matching the sum of individual purchases, and players notice that.
 ]]
 function Balance.upgradeCost(upgrade: UpgradeConfig, level: number): number
 	if level < 0 then
@@ -44,14 +44,15 @@ function Balance.upgradeCost(upgrade: UpgradeConfig, level: number): number
 end
 
 --[[
-	Суммарная цена count уровней начиная с fromLevel.
+	Total price of `count` levels starting at `fromLevel`.
 
-	Это сумма геометрической прогрессии:
-	    S = a * (g^n - 1) / (g - 1),   где a = цена первого уровня
+	This is a geometric series:
+	    S = a * (g^n - 1) / (g - 1),   where a = price of the first level
 
-	Считаем замкнутой формулой, а не циклом: при покупке "максимум за раз"
-	count бывает в сотни уровней, и цикл на каждый клик — лишняя работа.
-	Случай g = 1 (линейная цена) формулой не берётся, там деление на ноль.
+	Computed in closed form rather than with a loop: on "buy max" the count
+	reaches hundreds of levels, and looping on every click is wasted work.
+	The g = 1 case (linear price) is not covered by the formula -- it divides
+	by zero -- so it gets its own branch.
 ]]
 function Balance.totalUpgradeCost(upgrade: UpgradeConfig, fromLevel: number, count: number): number
 	if count <= 0 then
@@ -69,16 +70,16 @@ function Balance.totalUpgradeCost(upgrade: UpgradeConfig, fromLevel: number, cou
 end
 
 --[[
-	Сколько уровней игрок может купить на balance и сколько это будет стоить.
+	How many levels the player can afford, and what that costs.
 
-	Обращаем формулу суммы:
+	Inverting the series formula:
 	    n = log(1 + balance * (g - 1) / a) / log(g)
 
-	Замкнутая формула даёт ответ мгновенно, но у неё есть беда: на больших
-	числах логарифм ошибается на единицу в последнем разряде, и игрок либо
-	недополучит уровень, либо уйдёт в минус. Поэтому результат обязательно
-	доводится проверкой в обе стороны — это дёшево (1-2 шага) и снимает
-	весь класс ошибок округления.
+	Closed form answers instantly, but it has a flaw: on large numbers the
+	logarithm is off by one in the last digit, so the player either loses a
+	level or goes negative. The result is therefore always corrected in both
+	directions -- that costs one or two steps and removes the entire class of
+	rounding bugs.
 ]]
 function Balance.maxAffordableLevels(
 	upgrade: UpgradeConfig,
@@ -103,16 +104,16 @@ function Balance.maxAffordableLevels(
 		levels = math.floor(math.log(1 + (balance * (growth - 1)) / first) / math.log(growth))
 	end
 
-	-- Больше, чем осталось до потолка, купить нельзя
+	-- Never buy past the level cap
 	levels = math.min(levels, upgrade.maxLevel - currentLevel)
 	levels = math.max(levels, 0)
 
-	-- Доводка вниз: формула могла завысить
+	-- Correct downwards: the formula may have overshot
 	while levels > 0 and Balance.totalUpgradeCost(upgrade, currentLevel, levels) > balance do
 		levels -= 1
 	end
 
-	-- Доводка вверх: формула могла занизить
+	-- Correct upwards: the formula may have undershot
 	while
 		currentLevel + levels < upgrade.maxLevel
 		and Balance.totalUpgradeCost(upgrade, currentLevel, levels + 1) <= balance
@@ -123,11 +124,11 @@ function Balance.maxAffordableLevels(
 	return levels, Balance.totalUpgradeCost(upgrade, currentLevel, levels)
 end
 
---[[ Доход ]]
+--[[ Income ]]
 
 --[[
-	Доход в секунду от одного апгрейда с учётом множителя престижа.
-	На нулевом уровне апгрейд не приносит ничего.
+	Income per second from a single upgrade, including the prestige
+	multiplier. At level zero an upgrade produces nothing.
 ]]
 function Balance.incomePerSecond(upgrade: UpgradeConfig, level: number, multiplier: number): number
 	if level <= 0 then
@@ -138,8 +139,8 @@ function Balance.incomePerSecond(upgrade: UpgradeConfig, level: number, multipli
 end
 
 --[[
-	Суммарный доход по всем апгрейдам игрока.
-	Незнакомые ключи в levels игнорируются — их мог оставить старый сейв.
+	Total income across all of the player's upgrades.
+	Unknown keys in `levels` are ignored -- an old save may still carry them.
 ]]
 function Balance.totalIncomePerSecond(
 	upgrades: { [string]: UpgradeConfig },
@@ -158,7 +159,7 @@ function Balance.totalIncomePerSecond(
 	return total
 end
 
---[[ Престиж ]]
+--[[ Prestige ]]
 
 export type PrestigeConfig = {
 	baseRequirement: number,
@@ -167,16 +168,17 @@ export type PrestigeConfig = {
 	maxPrestige: number,
 }
 
---[[ Сколько всего нужно заработать, чтобы уйти в престиж номер prestigeCount + 1 ]]
+--[[ Lifetime earnings needed to enter prestige number prestigeCount + 1 ]]
 function Balance.prestigeRequirement(config: PrestigeConfig, prestigeCount: number): number
 	if prestigeCount >= config.maxPrestige then
-		return math.huge -- потолок достигнут, дальше престижа нет
+		return math.huge -- cap reached, there is no further prestige
 	end
 	return config.baseRequirement * config.requirementGrowth ^ prestigeCount
 end
 
---[[ Множитель дохода за уже набранные престижи. Линейный, не экспоненциальный:
-     экспонента здесь ломает баланс через десяток престижей. ]]
+--[[ Income multiplier from prestiges already earned. Linear, not
+     exponential: an exponential curve here breaks balance within a dozen
+     prestiges. ]]
 function Balance.prestigeMultiplier(config: PrestigeConfig, prestigeCount: number): number
 	local capped = math.min(prestigeCount, config.maxPrestige)
 	return 1 + config.multiplierPerPrestige * capped
@@ -193,7 +195,7 @@ function Balance.canPrestige(
 	return lifetimeEarned >= Balance.prestigeRequirement(config, prestigeCount)
 end
 
---[[ Оффлайн-доход ]]
+--[[ Offline earnings ]]
 
 export type OfflineConfig = {
 	maxSeconds: number,
@@ -204,16 +206,16 @@ export type OfflineConfig = {
 }
 
 --[[
-	Начисление за время отсутствия.
+	Earnings for time spent away.
 
-	Возвращает (сумма, сколько секунд реально засчитано) — вторым значением,
-	чтобы UI мог честно написать "начислено за 8 ч из 30 ч отсутствия".
+	Returns (amount, seconds actually credited). The second value exists so
+	the UI can honestly say "credited 8h out of 30h away".
 
-	Защиты:
-	  * отрицательный elapsed (часы игрока/сервера съехали) => 0;
-	  * слишком короткое отсутствие => 0, иначе реконнект превращается
-	    в фарм;
-	  * потолок по времени, иначе вернувшийся через год ломает экономику.
+	Guards:
+	  * negative elapsed (player or server clock drifted) => 0;
+	  * absence too short => 0, otherwise reconnecting becomes a farm;
+	  * a cap on time, otherwise someone returning after a year breaks the
+	    economy.
 ]]
 function Balance.offlineEarnings(
 	config: OfflineConfig,

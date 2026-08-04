@@ -1,21 +1,22 @@
 --!strict
 --[[
-	Валидация всего, что приходит от клиента.
+	Validation of everything that arrives from the client.
 
-	Базовое допущение: клиент враждебен. Любой аргумент ремоута может
-	оказаться nil, таблицей, NaN, отрицательным, дробным или строкой длиной
-	в мегабайт — эксплойтеру ничего не стоит вызвать ремоут напрямую.
+	Baseline assumption: the client is hostile. Any remote argument may turn
+	out to be nil, a table, NaN, negative, fractional, or a megabyte-long
+	string -- calling a remote directly costs an exploiter nothing.
 
-	Логика вынесена из сервиса в чистый модуль сознательно: так её видно
-	целиком в одном месте и можно прогнать тестами без запуска Roblox.
-	Проверки безопасности — последнее, что стоит тестировать вручную.
+	This logic is deliberately pulled out of the service into a pure module:
+	it is visible in one place and it can be exercised by tests without
+	launching Roblox. Security checks are the last thing that should be
+	verified by hand.
 ]]
 
--- Потолок на пакетную покупку. Нужен не ради баланса, а чтобы вызов
--- с count = 1e9 не увёл сервер в долгий цикл.
+-- Cap on a batch purchase. Not a balance knob: it exists so a call with
+-- count = 1e9 cannot drag the server into a very long loop.
 local MAX_BATCH = 1000
 
--- Длиннее любого осмысленного id; отсекает попытки прислать мегабайтную строку
+-- Longer than any meaningful id; blocks attempts to send a huge string
 local MAX_ID_LENGTH = 64
 
 export type UpgradeConfig = {
@@ -32,58 +33,58 @@ local Validate = {}
 Validate.MAX_BATCH = MAX_BATCH
 
 --[[
-	Целое число в заданных границах.
+	An integer within the given bounds.
 
-	Отдельно проверяем NaN (не равен сам себе) и дробную часть: `count`
-	вроде 2.5 при использовании в цикле даст неожиданное поведение,
-	а `math.huge` подвесит сервер.
+	NaN (never equal to itself) and the fractional part are checked
+	separately: a `count` like 2.5 makes a loop behave unexpectedly, and
+	`math.huge` would hang the server.
 ]]
 function Validate.integerInRange(value: unknown, min: number, max: number): (boolean, string?)
 	if type(value) ~= "number" then
-		return false, `ожидалось число, пришло {typeof(value)}`
+		return false, `expected a number, got {typeof(value)}`
 	end
 
 	if value ~= value then
-		return false, "значение NaN"
+		return false, "value is NaN"
 	end
 
 	if value == math.huge or value == -math.huge then
-		return false, "значение бесконечно"
+		return false, "value is infinite"
 	end
 
 	if value % 1 ~= 0 then
-		return false, `ожидалось целое, пришло {value}`
+		return false, `expected an integer, got {value}`
 	end
 
 	if value < min or value > max then
-		return false, `значение {value} вне диапазона [{min}, {max}]`
+		return false, `value {value} is outside [{min}, {max}]`
 	end
 
 	return true
 end
 
---[[ Строковый идентификатор: тип, непустота, разумная длина ]]
+--[[ String identifier: type, non-empty, sane length ]]
 function Validate.identifier(value: unknown): (boolean, string?)
 	if type(value) ~= "string" then
-		return false, `ожидалась строка, пришло {typeof(value)}`
+		return false, `expected a string, got {typeof(value)}`
 	end
 
 	if #value == 0 then
-		return false, "пустой идентификатор"
+		return false, "empty identifier"
 	end
 
 	if #value > MAX_ID_LENGTH then
-		return false, `идентификатор длиннее {MAX_ID_LENGTH} символов`
+		return false, `identifier longer than {MAX_ID_LENGTH} characters`
 	end
 
 	return true
 end
 
 --[[
-	Полная проверка запроса на покупку апгрейда.
+	Full check of an upgrade purchase request.
 
-	Возвращает (ok, err, upgrade, count) — при успехе отдаём уже найденный
-	конфиг апгрейда, чтобы сервис не искал его второй раз.
+	Returns (ok, err, upgrade, count) -- on success the resolved upgrade
+	config comes back too, so the service does not look it up twice.
 ]]
 function Validate.upgradeRequest(
 	upgrades: { [string]: UpgradeConfig },
@@ -95,11 +96,11 @@ function Validate.upgradeRequest(
 		return false, `upgradeId: {idError}`
 	end
 
-	-- Проверка существования идёт ПОСЛЕ проверки типа: индексировать
-	-- таблицу произвольным значением от клиента нельзя
+	-- The existence check runs AFTER the type check: indexing a table with
+	-- an arbitrary client-supplied value is not acceptable
 	local upgrade = upgrades[upgradeId :: string]
 	if not upgrade then
-		return false, `неизвестный апгрейд: {upgradeId :: string}`
+		return false, `unknown upgrade: {upgradeId :: string}`
 	end
 
 	local countOk, countError = Validate.integerInRange(count, 1, MAX_BATCH)

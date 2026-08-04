@@ -1,0 +1,14 @@
+[package]
+name = "sergeychagai/idle-economy"
+description = "Economy and progression system for Roblox: currencies, cost curves, prestige, offline income"
+version = "0.1.0"
+license = "MIT"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+exclude = ["**"]
+
+[dependencies]
+# Service/controller framework. Pinned to an exact version rather than a
+# range: on a one-developer project an unexpected dependency bump is a lost
+# evening, not a saved minute.
+Knit = "sleitnick/knit@1.7.0"

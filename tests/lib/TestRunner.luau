@@ -1,16 +1,16 @@
 --!strict
 --[[
-	Минимальный тест-раннер в духе TestEZ/Jest.
+	Minimal test runner in the spirit of TestEZ/Jest.
 
-	Написан руками, а не взят готовым, по одной причине: он должен работать
-	в Lune без единой зависимости. Сорок строк логики против ещё одного
-	пакета в проекте — размен в пользу сорока строк.
+	Hand-written rather than taken off the shelf for one reason: it has to run
+	in Lune with zero dependencies. Forty lines of logic against one more
+	package in the project -- the trade favours the forty lines.
 
-	Использование в spec-файле:
+	Usage inside a spec file:
 
 		return function(t)
-			t.describe("группа", function()
-				t.it("что-то делает", function()
+			t.describe("group", function()
+				t.it("does something", function()
 					t.expect(2 + 2).toBe(4)
 				end)
 			end)
@@ -37,7 +37,7 @@ export type Context = {
 
 local TestRunner = {}
 
---[[ Сравнение ]]
+--[[ Comparison ]]
 
 local function describeValue(value: any): string
 	if type(value) == "string" then
@@ -46,7 +46,7 @@ local function describeValue(value: any): string
 	return tostring(value)
 end
 
--- Рекурсивное сравнение таблиц по значению
+-- Recursive by-value table comparison
 local function deepEqual(a: any, b: any): boolean
 	if a == b then
 		return true
@@ -71,7 +71,7 @@ local function deepEqual(a: any, b: any): boolean
 	return true
 end
 
---[[ Запуск ]]
+--[[ Execution ]]
 
 type Failure = {
 	path: string,
@@ -83,7 +83,7 @@ function TestRunner.run(specs: { [string]: (Context) -> () }): (number, number, 
 	local failed = 0
 	local failures: { Failure } = {}
 
-	-- Стек имён групп: нужен, чтобы в отчёте было видно полный путь до теста
+	-- Stack of group names, so the report shows the full path to a test
 	local groups: { string } = {}
 
 	local function currentPath(name: string): string
@@ -102,13 +102,13 @@ function TestRunner.run(specs: { [string]: (Context) -> () }): (number, number, 
 		return {
 			toBe = function(expected: any)
 				if value ~= expected then
-					fail(`ожидалось {describeValue(expected)}, получено {describeValue(value)}`)
+					fail(`expected {describeValue(expected)}, got {describeValue(value)}`)
 				end
 			end,
 
 			toEqual = function(expected: any)
 				if not deepEqual(value, expected) then
-					fail(`структуры не совпали: ожидалось {describeValue(expected)}, получено {describeValue(value)}`)
+					fail(`structures differ: expected {describeValue(expected)}, got {describeValue(value)}`)
 				end
 			end,
 
@@ -116,47 +116,47 @@ function TestRunner.run(specs: { [string]: (Context) -> () }): (number, number, 
 				local eps = tolerance or 1e-9
 				local diff = math.abs(value - expected)
 				if diff > eps then
-					fail(`ожидалось ~{expected} (допуск {eps}), получено {value}, расхождение {diff}`)
+					fail(`expected ~{expected} (tolerance {eps}), got {value}, off by {diff}`)
 				end
 			end,
 
 			toBeGreaterThan = function(expected: number)
 				if not (value > expected) then
-					fail(`ожидалось значение больше {expected}, получено {value}`)
+					fail(`expected a value greater than {expected}, got {value}`)
 				end
 			end,
 
 			toBeLessThan = function(expected: number)
 				if not (value < expected) then
-					fail(`ожидалось значение меньше {expected}, получено {value}`)
+					fail(`expected a value less than {expected}, got {value}`)
 				end
 			end,
 
 			toBeTruthy = function()
 				if not value then
-					fail(`ожидалось истинное значение, получено {describeValue(value)}`)
+					fail(`expected a truthy value, got {describeValue(value)}`)
 				end
 			end,
 
 			toBeFalsy = function()
 				if value then
-					fail(`ожидалось ложное значение, получено {describeValue(value)}`)
+					fail(`expected a falsy value, got {describeValue(value)}`)
 				end
 			end,
 
 			toBeNil = function()
 				if value ~= nil then
-					fail(`ожидался nil, получено {describeValue(value)}`)
+					fail(`expected nil, got {describeValue(value)}`)
 				end
 			end,
 
 			toThrow = function()
 				if type(value) ~= "function" then
-					fail("toThrow применим только к функции")
+					fail("toThrow only applies to a function")
 				end
 				local ok = pcall(value)
 				if ok then
-					fail("ожидалась ошибка, но вызов прошёл успешно")
+					fail("expected an error, but the call succeeded")
 				end
 			end,
 		}
@@ -192,9 +192,9 @@ function TestRunner.run(specs: { [string]: (Context) -> () }): (number, number, 
 			failed += 1
 			table.insert(failures, {
 				path = specName,
-				message = `spec-файл упал целиком: {tostring(err)}`,
+				message = `spec file failed to run: {tostring(err)}`,
 			})
-			print(`  FAIL  {specName} (файл не выполнился)`)
+			print(`  FAIL  {specName} (file did not execute)`)
 		end
 	end
 

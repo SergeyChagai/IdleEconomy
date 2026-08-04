@@ -1,23 +1,23 @@
 --!strict
 --[[
-	EconomyService — сервер владеет экономикой целиком.
+	EconomyService -- the server owns the economy end to end.
 
-	Правила, которым подчинён весь модуль:
+	Rules the whole module obeys:
 
-	  1. Состояние живёт только здесь. Клиенту уходят числа для показа,
-	     но ни одно решение не принимается на клиенте.
-	  2. Каждый аргумент из ремоута проходит Validate. Клиент враждебен.
-	  3. Клиент никогда не присылает СТОИМОСТЬ или РЕЗУЛЬТАТ — только
-	     намерение ("хочу купить N уровней Pickaxe"). Цену считает сервер.
+	  1. State lives only here. The client receives numbers to display, but
+	     no decision is ever made on the client.
+	  2. Every remote argument goes through Validate. The client is hostile.
+	  3. The client never sends a PRICE or a RESULT -- only intent ("buy N
+	     levels of Pickaxe"). The server computes the cost.
 
-	Третий пункт — тот, на котором чаще всего валятся тестовые: если
-	ремоут принимает `cost` или `reward`, эксплойтер пришлёт свои значения.
+	Rule three is where take-home tasks usually fail: if a remote accepts
+	`cost` or `reward`, an exploiter simply sends their own values.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Knit = require(ReplicatedStorage.Packages.Knit.Knit)
+local Knit = require(ReplicatedStorage.Packages.Knit)
 
 local Economy = ReplicatedStorage.Shared.Economy
 local Balance = require(Economy.Balance)
@@ -27,15 +27,15 @@ local Validate = require(Economy.Validate)
 local Wallet = require(Economy.Wallet)
 
 local CURRENCY = "Coins"
-local INCOME_TICK = 1 -- как часто начисляем пассивный доход, секунд
+local INCOME_TICK = 1 -- how often passive income is credited, in seconds
 
 type PlayerState = {
 	wallet: Wallet.Wallet,
 	levels: { [string]: number },
 	prestigeCount: number,
 	lifetimeEarned: number,
-	-- Свой лимитер на каждого игрока: общий позволил бы одному
-	-- эксплойтеру заблокировать добычу всему серверу
+	-- One limiter per player: a shared one would let a single exploiter
+	-- lock mining for everyone on the server
 	clickLimiter: RateLimiter.RateLimiter,
 }
 
@@ -52,16 +52,16 @@ export type PublicState = {
 local EconomyService = Knit.CreateService({
 	Name = "EconomyService",
 
-	-- Единственное место, где живёт состояние игроков
+	-- The single place where player state lives
 	_states = {} :: { [Player]: PlayerState },
 
 	Client = {
-		-- Сервер сам сообщает клиенту новое состояние; клиент не опрашивает
+		-- The server pushes new state; the client never polls
 		StateChanged = Knit.CreateSignal(),
 	},
 })
 
---[[ Внутреннее ]]
+--[[ Internals ]]
 
 local function createState(): PlayerState
 	local levels: { [string]: number } = {}
@@ -86,11 +86,11 @@ function EconomyService:_getState(player: Player): PlayerState?
 	return self._states[player]
 end
 
---[[ Публичный снимок состояния для клиента.
+--[[ Public snapshot of the state for the client.
 
-     Отдаём именно снимок, а не внутреннюю таблицу: иначе изменения
-     на сервере утекали бы клиенту незаметно для нас, а главное — клиент
-     получил бы поля, которые ему знать незачем. ]]
+     A snapshot rather than the internal table: otherwise server-side changes
+     would leak to the client without us noticing, and -- more importantly --
+     the client would receive fields it has no business knowing. ]]
 function EconomyService:_publicState(state: PlayerState): PublicState
 	local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
 
@@ -124,18 +124,18 @@ function EconomyService:_push(player: Player)
 	end
 end
 
---[[ Серверный API ]]
+--[[ Server API ]]
 
 --[[
-	Покупка уровней апгрейда.
+	Buy upgrade levels.
 
-	Возвращает (ok, err) — текст ошибки уходит клиенту как есть, ничего
-	секретного в нём нет, зато отладка становится осмысленной.
+	Returns (ok, err). The error text is forwarded to the client verbatim --
+	there is nothing secret in it, and it makes debugging meaningful.
 ]]
 function EconomyService:BuyUpgrade(player: Player, upgradeId: string, count: number): (boolean, string?)
 	local state = self:_getState(player)
 	if not state then
-		return false, "профиль игрока не загружен"
+		return false, "player profile is not loaded"
 	end
 
 	local ok, err, upgrade, safeCount = Validate.upgradeRequest(
@@ -146,20 +146,20 @@ function EconomyService:BuyUpgrade(player: Player, upgradeId: string, count: num
 	if not ok then
 		return false, err
 	end
-	assert(upgrade and safeCount, "валидатор вернул ok без данных")
+	assert(upgrade and safeCount, "validator returned ok without data")
 
 	local currentLevel = state.levels[upgrade.id] or 0
 
-	-- Обрезаем по потолку уровня, а не отказываем: игрок нажал "купить 10",
-	-- а до максимума осталось 3 — продаём 3, это ожидаемое поведение
+	-- Clamp to the level cap instead of refusing: the player pressed "buy 10"
+	-- with 3 levels left to the cap, so sell 3 -- that is expected behaviour
 	local available = upgrade.maxLevel - currentLevel
 	if available <= 0 then
-		return false, "достигнут максимальный уровень"
+		return false, "max level reached"
 	end
 
 	local levelsToBuy = math.min(safeCount, available)
 
-	-- Цену считает СЕРВЕР. Клиент прислал только количество.
+	-- The SERVER computes the price. The client only sent a quantity.
 	local price = Balance.totalUpgradeCost(upgrade, currentLevel, levelsToBuy)
 
 	local spent, spendError = state.wallet:trySpend(CURRENCY, price)
@@ -174,24 +174,24 @@ function EconomyService:BuyUpgrade(player: Player, upgradeId: string, count: num
 end
 
 --[[
-	Ручная добыча по клику.
+	Manual mining on click.
 
-	Это единственный источник дохода на старте: пассивный доход идёт только
-	с купленных уровней, а купить их не на что, пока нет денег.
+	This is the only income source at the start: passive income comes from
+	purchased levels, and there is no money to purchase them with yet.
 
-	Награду считает сервер, клиент не присылает ничего вообще — у ремоута
-	нет аргументов, подделывать нечего. Единственная защита, которая тут
-	нужна, — частота вызовов.
+	The server computes the reward and the client sends nothing at all -- the
+	remote takes no arguments, so there is nothing to forge. The only guard
+	needed here is call frequency.
 ]]
 function EconomyService:Collect(player: Player): (boolean, string?)
 	local state = self:_getState(player)
 	if not state then
-		return false, "профиль игрока не загружен"
+		return false, "player profile is not loaded"
 	end
 
-	-- os.clock монотонен и не прыгает при коррекции системных часов
+	-- os.clock is monotonic and does not jump when system time is corrected
 	if not state.clickLimiter:tryConsume(os.clock()) then
-		return false, "слишком часто"
+		return false, "too frequent"
 	end
 
 	local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
@@ -208,11 +208,11 @@ function EconomyService:Collect(player: Player): (boolean, string?)
 	return true
 end
 
---[[ Покупка максимума, который игрок может себе позволить ]]
+--[[ Buy as many levels as the player can currently afford ]]
 function EconomyService:BuyMaxUpgrade(player: Player, upgradeId: string): (boolean, string?)
 	local state = self:_getState(player)
 	if not state then
-		return false, "профиль игрока не загружен"
+		return false, "player profile is not loaded"
 	end
 
 	local idOk, idError = Validate.identifier(upgradeId)
@@ -222,7 +222,7 @@ function EconomyService:BuyMaxUpgrade(player: Player, upgradeId: string): (boole
 
 	local upgrade = EconomyConfig.upgrades[upgradeId]
 	if not upgrade then
-		return false, "неизвестный апгрейд"
+		return false, "unknown upgrade"
 	end
 
 	local currentLevel = state.levels[upgrade.id] or 0
@@ -233,26 +233,26 @@ function EconomyService:BuyMaxUpgrade(player: Player, upgradeId: string): (boole
 	)
 
 	if levels <= 0 then
-		return false, "недостаточно средств"
+		return false, "insufficient funds"
 	end
 
 	return self:BuyUpgrade(player, upgradeId, levels)
 end
 
 --[[
-	Престиж: сброс уровней в обмен на постоянный множитель.
+	Prestige: reset levels in exchange for a permanent multiplier.
 
-	lifetimeEarned НЕ сбрасывается — по нему считается порог следующего
-	престижа. Сбросить его значит выдать игроку бесконечный престиж.
+	lifetimeEarned is NOT reset -- the next prestige threshold is measured
+	against it. Resetting it would hand the player infinite prestige.
 ]]
 function EconomyService:Prestige(player: Player): (boolean, string?)
 	local state = self:_getState(player)
 	if not state then
-		return false, "профиль игрока не загружен"
+		return false, "player profile is not loaded"
 	end
 
 	if not Balance.canPrestige(EconomyConfig.prestige, state.lifetimeEarned, state.prestigeCount) then
-		return false, "порог престижа не достигнут"
+		return false, "prestige threshold not reached"
 	end
 
 	state.prestigeCount += 1
@@ -266,7 +266,7 @@ function EconomyService:Prestige(player: Player): (boolean, string?)
 	return true
 end
 
---[[ Пассивный доход ]]
+--[[ Passive income ]]
 
 function EconomyService:_tick(deltaTime: number)
 	for player, state in self._states do
@@ -282,10 +282,10 @@ function EconomyService:_tick(deltaTime: number)
 	end
 end
 
---[[ Клиентский API — всё, что доступно с клиента ]]
+--[[ Client API -- everything reachable from the client ]]
 
 function EconomyService.Client:BuyUpgrade(player: Player, upgradeId: unknown, count: unknown)
-	-- Типы приводим только после валидации внутри сервиса
+	-- Types are only asserted after validation inside the service
 	return self.Server:BuyUpgrade(player, upgradeId :: any, count :: any)
 end
 
@@ -306,13 +306,13 @@ function EconomyService.Client:GetState(player: Player): PublicState?
 	return if state then self.Server:_publicState(state) else nil
 end
 
---[[ Жизненный цикл Knit ]]
+--[[ Knit lifecycle ]]
 
 function EconomyService:KnitStart()
 	local function onPlayerAdded(player: Player)
-		-- ТУТ будет загрузка профиля (ProfileStore) и начисление
-		-- оффлайн-дохода через Balance.offlineEarnings. Пока состояние
-		-- создаётся с нуля — персистентность это отдельная система.
+		-- TODO: load the profile (ProfileStore) here and credit offline
+		-- income via Balance.offlineEarnings. State is created from scratch
+		-- for now -- persistence is a separate system.
 		self._states[player] = createState()
 		self:_push(player)
 	end
@@ -323,7 +323,7 @@ function EconomyService:KnitStart()
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
-		-- ТУТ будет сохранение профиля
+		-- TODO: save the profile here
 		self._states[player] = nil
 	end)
 

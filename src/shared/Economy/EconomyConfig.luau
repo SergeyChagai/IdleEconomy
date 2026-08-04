@@ -1,52 +1,52 @@
 --!strict
 --[[
-	Конфигурация экономики.
+	Economy configuration.
 
-	Здесь только данные — никакой логики и никаких require. Благодаря этому
-	модуль одинаково грузится и в Roblox, и в Lune (тесты из консоли).
+	Data only -- no logic and no `require`. That is what lets this module load
+	both inside Roblox and inside Lune, where the tests run.
 
-	Все кривые собраны в одном месте намеренно: баланс правится дизайнером,
-	и правки не должны требовать чтения кода.
+	Every curve lives here on purpose: balance is tuned by a designer, and
+	tuning must not require reading code.
 ]]
 
 export type UpgradeConfig = {
 	id: string,
 	displayName: string,
-	-- Цена уровня N = baseCost * costGrowth ^ N
+	-- Price of level N = baseCost * costGrowth ^ N
 	baseCost: number,
 	costGrowth: number,
-	-- Доход в секунду = level * incomePerLevel * (множители)
+	-- Income per second = level * incomePerLevel * (multipliers)
 	incomePerLevel: number,
 	maxLevel: number,
 }
 
 export type PrestigeConfig = {
-	-- Порог престижа P = baseRequirement * requirementGrowth ^ P
+	-- Threshold for prestige P = baseRequirement * requirementGrowth ^ P
 	baseRequirement: number,
 	requirementGrowth: number,
-	-- Множитель дохода = 1 + multiplierPerPrestige * P
+	-- Income multiplier = 1 + multiplierPerPrestige * P
 	multiplierPerPrestige: number,
 	maxPrestige: number,
 }
 
 export type OfflineConfig = {
-	-- Сколько реального времени максимум засчитываем
+	-- Upper bound on how much real time is ever credited
 	maxSeconds: number,
-	-- Какую долю обычного дохода начисляем за оффлайн
+	-- Fraction of normal income granted while offline
 	rateFactor: number,
-	-- То же самое для владельцев геймпасса
+	-- The same two knobs for gamepass owners
 	gamepassMaxSeconds: number,
 	gamepassRateFactor: number,
-	-- Меньше этого времени вообще игнорируем (защита от спама реконнектом)
+	-- Absences shorter than this are ignored (reconnect-farming guard)
 	minSeconds: number,
 }
 
 export type ClickConfig = {
-	-- Базовая награда за клик, умножается на множитель престижа
+	-- Base reward per click, scaled by the prestige multiplier
 	baseValue: number,
-	-- Запас на всплеск: столько кликов подряд разрешено
+	-- Burst allowance: how many clicks in a row are accepted
 	burstCapacity: number,
-	-- Устойчивый темп восстановления, кликов в секунду
+	-- Sustained refill rate, clicks per second
 	refillPerSecond: number,
 }
 
@@ -61,7 +61,7 @@ local EconomyConfig: EconomyConfig = {
 	upgrades = {
 		Pickaxe = {
 			id = "Pickaxe",
-			displayName = "Кирка",
+			displayName = "Pickaxe",
 			baseCost = 50,
 			costGrowth = 1.15,
 			incomePerLevel = 1.5,
@@ -70,7 +70,7 @@ local EconomyConfig: EconomyConfig = {
 
 		Backpack = {
 			id = "Backpack",
-			displayName = "Рюкзак",
+			displayName = "Backpack",
 			baseCost = 250,
 			costGrowth = 1.22,
 			incomePerLevel = 6,
@@ -79,7 +79,7 @@ local EconomyConfig: EconomyConfig = {
 
 		Drill = {
 			id = "Drill",
-			displayName = "Бур",
+			displayName = "Drill",
 			baseCost = 10_000,
 			costGrowth = 1.35,
 			incomePerLevel = 90,
@@ -102,9 +102,9 @@ local EconomyConfig: EconomyConfig = {
 		minSeconds = 60,
 	},
 
-	-- Ручная добыча: то, с чего игрок начинает, пока нет пассивного дохода.
-	-- Темп подобран так, чтобы живой человек (5-8 кликов/с) не упирался
-	-- в лимит, а автокликер упирался сразу.
+	-- Manual mining: the only income source before anything is bought.
+	-- Tuned so a human (5-8 clicks/s) never hits the limit while an
+	-- autoclicker hits it immediately.
 	click = {
 		baseValue = 5,
 		burstCapacity = 12,

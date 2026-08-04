@@ -1,9 +1,9 @@
 --!strict
 --[[
-	Тесты валидации ремоутов.
+	Remote validation tests.
 
-	Пишутся с позиции атакующего: что можно прислать в ремоут, чтобы
-	уронить сервер, подвесить его или получить лишние деньги.
+	Written from the attacker's seat: what can be sent into a remote to crash
+	the server, hang it, or extract extra money.
 ]]
 
 local Validate = require("../src/shared/Economy/Validate")
@@ -15,53 +15,54 @@ return function(t)
 	local describe, it, expect = t.describe, t.it, t.expect
 
 	describe("integerInRange", function()
-		it("принимает целое внутри диапазона", function()
+		it("accepts an integer inside the range", function()
 			expect(Validate.integerInRange(5, 1, 10)).toBeTruthy()
 		end)
 
-		it("принимает границы диапазона", function()
+		it("accepts the range boundaries", function()
 			expect(Validate.integerInRange(1, 1, 10)).toBeTruthy()
 			expect(Validate.integerInRange(10, 1, 10)).toBeTruthy()
 		end)
 
-		it("отклоняет выход за границы", function()
+		it("rejects values outside the range", function()
 			expect(Validate.integerInRange(0, 1, 10)).toBeFalsy()
 			expect(Validate.integerInRange(11, 1, 10)).toBeFalsy()
 		end)
 
-		it("отклоняет дробное", function()
-			-- 2.5 в цикле "купить N раз" даёт неожиданное число итераций
+		it("rejects a fractional value", function()
+			-- 2.5 in a "buy N times" loop gives an unexpected iteration count
 			expect(Validate.integerInRange(2.5, 1, 10)).toBeFalsy()
 		end)
 
-		it("отклоняет nil", function()
+		it("rejects nil", function()
 			expect(Validate.integerInRange(nil, 1, 10)).toBeFalsy()
 		end)
 
-		it("отклоняет строку", function()
+		it("rejects a string", function()
 			expect(Validate.integerInRange("5", 1, 10)).toBeFalsy()
 		end)
 
-		it("отклоняет таблицу", function()
+		it("rejects a table", function()
 			expect(Validate.integerInRange({}, 1, 10)).toBeFalsy()
 		end)
 
-		it("отклоняет булево", function()
+		it("rejects a boolean", function()
 			expect(Validate.integerInRange(true, 1, 10)).toBeFalsy()
 		end)
 
-		it("отклоняет NaN", function()
+		it("rejects NaN", function()
 			expect(Validate.integerInRange(0 / 0, 1, 10)).toBeFalsy()
 		end)
 
-		--[[ math.huge % 1 даёт NaN, а не 0 — проверка на дробность его
-		     не поймает, нужна отдельная. Классическая дыра. ]]
-		it("отклоняет бесконечность", function()
+		--[[ math.huge % 1 yields NaN rather than 0, so the fractional check
+		     does not catch it -- a dedicated check is required. A classic
+		     hole. ]]
+		it("rejects infinity", function()
 			expect(Validate.integerInRange(math.huge, 1, 10)).toBeFalsy()
 			expect(Validate.integerInRange(-math.huge, 1, 10)).toBeFalsy()
 		end)
 
-		it("возвращает текст ошибки", function()
+		it("returns an error message", function()
 			local ok, err = Validate.integerInRange(99, 1, 10)
 			expect(ok).toBeFalsy()
 			expect(err).toBeTruthy()
@@ -69,35 +70,35 @@ return function(t)
 	end)
 
 	describe("identifier", function()
-		it("принимает нормальную строку", function()
+		it("accepts a normal string", function()
 			expect(Validate.identifier("Pickaxe")).toBeTruthy()
 		end)
 
-		it("отклоняет пустую строку", function()
+		it("rejects an empty string", function()
 			expect(Validate.identifier("")).toBeFalsy()
 		end)
 
-		it("отклоняет nil", function()
+		it("rejects nil", function()
 			expect(Validate.identifier(nil)).toBeFalsy()
 		end)
 
-		it("отклоняет число", function()
+		it("rejects a number", function()
 			expect(Validate.identifier(42)).toBeFalsy()
 		end)
 
-		it("отклоняет таблицу", function()
+		it("rejects a table", function()
 			expect(Validate.identifier({})).toBeFalsy()
 		end)
 
-		--[[ Эксплойтер может прислать строку в мегабайт, чтобы раздуть
-		     логи и память сервера ]]
-		it("отклоняет слишком длинную строку", function()
+		--[[ An exploiter can send a megabyte-long string to inflate server
+		     logs and memory ]]
+		it("rejects an overly long string", function()
 			expect(Validate.identifier(string.rep("a", 100_000))).toBeFalsy()
 		end)
 	end)
 
 	describe("upgradeRequest", function()
-		it("пропускает корректный запрос", function()
+		it("accepts a well-formed request", function()
 			local ok, err, upgrade, count = Validate.upgradeRequest(upgrades, "Pickaxe", 5)
 
 			expect(ok).toBeTruthy()
@@ -106,50 +107,50 @@ return function(t)
 			expect(count).toBe(5)
 		end)
 
-		it("возвращает найденный конфиг апгрейда", function()
+		it("returns the resolved upgrade config", function()
 			local _, _, upgrade = Validate.upgradeRequest(upgrades, "Drill", 1)
 			expect(upgrade.id).toBe("Drill")
 		end)
 
-		it("отклоняет неизвестный апгрейд", function()
-			local ok, err = Validate.upgradeRequest(upgrades, "НесуществующийАпгрейд", 1)
+		it("rejects an unknown upgrade", function()
+			local ok, err = Validate.upgradeRequest(upgrades, "NoSuchUpgrade", 1)
 			expect(ok).toBeFalsy()
 			expect(err).toBeTruthy()
 		end)
 
-		it("отклоняет нулевое количество", function()
+		it("rejects a zero count", function()
 			expect(Validate.upgradeRequest(upgrades, "Pickaxe", 0)).toBeFalsy()
 		end)
 
-		it("отклоняет отрицательное количество", function()
-			-- Без этой проверки покупка -10 уровней могла бы НАЧИСЛИТЬ денег
+		it("rejects a negative count", function()
+			-- Without this check, buying -10 levels could CREDIT money
 			expect(Validate.upgradeRequest(upgrades, "Pickaxe", -10)).toBeFalsy()
 		end)
 
-		--[[ Без потолка вызов с count = 1e9 отправит сервер в цикл
-		     на миллиард итераций и подвесит весь сервер, а не одного игрока ]]
-		it("отклоняет запредельное количество", function()
+		--[[ Without a cap, a call with count = 1e9 sends the server into a
+		     billion-iteration loop and hangs everyone on it, not one player ]]
+		it("rejects an absurd count", function()
 			expect(Validate.upgradeRequest(upgrades, "Pickaxe", 1e9)).toBeFalsy()
 		end)
 
-		it("принимает ровно максимальный размер пакета", function()
+		it("accepts exactly the maximum batch size", function()
 			expect(Validate.upgradeRequest(upgrades, "Pickaxe", Validate.MAX_BATCH)).toBeTruthy()
 		end)
 
-		it("отклоняет пропущенные аргументы", function()
+		it("rejects missing arguments", function()
 			expect(Validate.upgradeRequest(upgrades, nil, nil)).toBeFalsy()
 		end)
 
-		it("отклоняет аргументы не того типа", function()
+		it("rejects arguments of the wrong type", function()
 			expect(Validate.upgradeRequest(upgrades, {}, {})).toBeFalsy()
 		end)
 
 		--[[
-			Попытка достучаться до служебных полей таблицы через ремоут.
-			Проверка существования обязана идти после проверки типа, иначе
-			индексация произвольным значением даст неожиданный результат.
+			An attempt to reach table internals through a remote. The
+			existence check must run after the type check, otherwise indexing
+			with an arbitrary value produces surprising results.
 		]]
-		it("не даёт вытащить служебные поля таблицы", function()
+		it("does not expose table internals", function()
 			expect(Validate.upgradeRequest(upgrades, "__index", 1)).toBeFalsy()
 			expect(Validate.upgradeRequest(upgrades, "__metatable", 1)).toBeFalsy()
 		end)

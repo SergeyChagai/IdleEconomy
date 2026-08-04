@@ -1,22 +1,22 @@
 --!strict
 --[[
-	Кошелёк игрока — ООП-класс поверх набора валют.
+	Player wallet -- an OOP class over a set of currencies.
 
-	Существует ровно затем, чтобы у баланса было ОДНО место записи. Пока
-	валюта лежит просто числом в таблице, рано или поздно кто-нибудь сделает
-	`profile.Coins -= price` без проверки, и баланс уйдёт в минус. Здесь
-	любое изменение проходит через валидацию.
+	It exists so that a balance has exactly ONE place where it is written.
+	As long as currency is a plain number in a table, sooner or later someone
+	writes `profile.Coins -= price` without a check and the balance goes
+	negative. Here every change goes through validation.
 
-	Все методы, которые могут отказать, возвращают (ok, error) вместо того
-	чтобы бросать исключение: отказ в оплате — штатная ситуация, а не сбой,
-	и оборачивать каждую покупку в pcall не хочется.
+	Methods that can fail return (ok, error) instead of raising: a declined
+	payment is a normal outcome, not a fault, and wrapping every purchase in
+	pcall would be noise.
 
-	Модуль чистый: без require и без обращений к движку.
+	Pure module: no `require`, no engine access.
 ]]
 
--- Потолок, за которым double начинает терять единицы. 2^53 — предел, где
--- целые числа ещё представимы точно. Дальше баланс молча "залипает",
--- и игрок видит, что покупки не списываются.
+-- The ceiling past which a double starts losing integer precision. 2^53 is
+-- the last value where integers are still exact. Beyond it the balance
+-- silently "sticks" and the player sees purchases that never deduct.
 local MAX_BALANCE = 2 ^ 53
 
 export type CurrencyAmounts = { [string]: number }
@@ -30,7 +30,7 @@ Wallet.__index = Wallet
 
 export type Wallet = typeof(setmetatable({} :: WalletFields, Wallet))
 
---[[ Валидация ]]
+--[[ Validation ]]
 
 local function isValidAmount(amount: number): boolean
 	if type(amount) ~= "number" then
@@ -45,11 +45,12 @@ local function isValidAmount(amount: number): boolean
 	return amount >= 0
 end
 
---[[ Создание ]]
+--[[ Construction ]]
 
 --[[
-	initial — необязательный стартовый баланс. Копируем его, а не берём
-	ссылку: иначе вызывающий код сможет менять баланс в обход класса.
+	`initial` is an optional starting balance. It is copied rather than
+	referenced: otherwise the caller could keep mutating the balance behind
+	the class's back.
 ]]
 function Wallet.new(initial: CurrencyAmounts?): Wallet
 	local balances: CurrencyAmounts = {}
@@ -59,7 +60,7 @@ function Wallet.new(initial: CurrencyAmounts?): Wallet
 			if isValidAmount(amount) then
 				balances[currency] = math.min(amount, MAX_BALANCE)
 			else
-				-- Битое значение из сейва не должно ронять вход в игру
+				-- A corrupt value from a save must not block joining the game
 				balances[currency] = 0
 			end
 		end
@@ -68,7 +69,7 @@ function Wallet.new(initial: CurrencyAmounts?): Wallet
 	return setmetatable({ _balances = balances }, Wallet)
 end
 
---[[ Чтение ]]
+--[[ Reads ]]
 
 function Wallet.get(self: Wallet, currency: string): number
 	return self._balances[currency] or 0
@@ -81,8 +82,8 @@ function Wallet.has(self: Wallet, currency: string, amount: number): boolean
 	return self:get(currency) >= amount
 end
 
---[[ Снимок для сохранения. Возвращаем копию — наружу внутренняя таблица
-     не уходит, иначе её изменят мимо класса. ]]
+--[[ Snapshot for saving. Returns a copy -- the internal table never leaves
+     the class, otherwise callers would mutate it directly. ]]
 function Wallet.serialize(self: Wallet): CurrencyAmounts
 	local snapshot: CurrencyAmounts = {}
 	for currency, amount in self._balances do
@@ -91,25 +92,25 @@ function Wallet.serialize(self: Wallet): CurrencyAmounts
 	return snapshot
 end
 
---[[ Изменение ]]
+--[[ Mutations ]]
 
 --[[
-	Начислить. Отказывает на отрицательных и нечисловых суммах: списание
-	должно идти через spend, иначе проверка "хватает ли денег" обходится
-	вызовом add с минусом.
+	Credit an amount. Rejects negative and non-numeric values: spending must
+	go through trySpend, otherwise the "can they afford it" check is bypassed
+	by calling add with a negative number.
 ]]
 function Wallet.add(self: Wallet, currency: string, amount: number): (boolean, string?)
 	if not isValidAmount(amount) then
-		return false, `некорректная сумма: {tostring(amount)}`
+		return false, `invalid amount: {tostring(amount)}`
 	end
 
 	local current = self:get(currency)
 	local updated = current + amount
 
 	if updated > MAX_BALANCE then
-		-- Обрезаем, но сообщаем: молча терять начисления нельзя
+		-- Clamp, but report it: silently dropping income is not acceptable
 		self._balances[currency] = MAX_BALANCE
-		return false, "достигнут потолок баланса"
+		return false, "balance cap reached"
 	end
 
 	self._balances[currency] = updated
@@ -117,18 +118,18 @@ function Wallet.add(self: Wallet, currency: string, amount: number): (boolean, s
 end
 
 --[[
-	Списать, если хватает. Если не хватает — баланс НЕ меняется совсем.
-	Это ключевое свойство: частичное списание оставило бы игрока без денег
-	и без покупки.
+	Spend if affordable. When it is not, the balance does NOT change at all.
+	That is the key property: a partial deduction would leave the player
+	without the money and without the purchase.
 ]]
 function Wallet.trySpend(self: Wallet, currency: string, amount: number): (boolean, string?)
 	if not isValidAmount(amount) then
-		return false, `некорректная сумма: {tostring(amount)}`
+		return false, `invalid amount: {tostring(amount)}`
 	end
 
 	local current = self:get(currency)
 	if current < amount then
-		return false, "недостаточно средств"
+		return false, "insufficient funds"
 	end
 
 	self._balances[currency] = current - amount
@@ -136,8 +137,8 @@ function Wallet.trySpend(self: Wallet, currency: string, amount: number): (boole
 end
 
 --[[
-	Атомарный перевод между валютами (например, обмен гемов на монеты).
-	Либо проходят обе операции, либо ни одной.
+	Atomic transfer between currencies (for example gems into coins).
+	Either both operations happen or neither does.
 ]]
 function Wallet.tryExchange(
 	self: Wallet,
@@ -147,7 +148,7 @@ function Wallet.tryExchange(
 	toAmount: number
 ): (boolean, string?)
 	if not isValidAmount(fromAmount) or not isValidAmount(toAmount) then
-		return false, "некорректная сумма обмена"
+		return false, "invalid exchange amount"
 	end
 
 	local ok, err = self:trySpend(fromCurrency, fromAmount)
@@ -157,7 +158,7 @@ function Wallet.tryExchange(
 
 	local added, addError = self:add(toCurrency, toAmount)
 	if not added then
-		-- Откатываем списание: до этой строки состояние уже изменено
+		-- Roll the deduction back: state has already changed by this point
 		self:add(fromCurrency, fromAmount)
 		return false, addError
 	end

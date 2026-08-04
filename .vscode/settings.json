@@ -1,16 +1,16 @@
 {
-  // Файлы .luau должны открываться как Luau, а не как обычный Lua
+  // .luau files must open as Luau, not as plain Lua
   "files.associations": {
     "*.luau": "luau"
   },
 
-  // Глушим sumneko.lua в этой папке: он не понимает синтаксис Luau
-  // и будет подчёркивать корректный код красным
+  // Silence sumneko.lua in this folder: it does not understand Luau syntax
+  // and would underline correct code as errors
   "Lua.diagnostics.enable": false,
 
-  // luau-lsp строит карту проекта через Rojo — так он понимает,
-  // что ReplicatedStorage.Shared.Config это наш src/shared/Config.luau.
-  // Работает только когда установлен rojo.
+  // luau-lsp builds the project map through Rojo -- that is how it knows
+  // ReplicatedStorage.Shared.Economy.Balance is src/shared/Economy/Balance.luau.
+  // Requires rojo to be installed.
   "luau-lsp.sourcemap.enabled": true,
   "luau-lsp.sourcemap.rojoProjectFile": "default.project.json"
 }

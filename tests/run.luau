@@ -1,11 +1,11 @@
 --!strict
 --[[
-	Точка входа для прогона тестов в Lune.
+	Entry point for running the suite in Lune.
 
 	    lune run tests/run
 
-	Код возврата: 0 — все тесты прошли, 1 — есть падения. Это важно:
-	по нему CI отличает зелёную сборку от красной.
+	Exit code: 0 -- everything passed, 1 -- there were failures. That matters:
+	it is how CI tells a green build from a red one.
 ]]
 
 local process = require("@lune/process")
@@ -19,20 +19,20 @@ local specs = {
 	RateLimiter = require("./RateLimiter.spec"),
 }
 
-print("Прогон тестов экономики\n" .. string.rep("=", 50))
+print("Economy test suite\n" .. string.rep("=", 50))
 
 local passed, failed, failures = TestRunner.run(specs)
 
 print("\n" .. string.rep("=", 50))
 
 if failed > 0 then
-	print(`\nПадения ({failed}):\n`)
+	print(`\nFailures ({failed}):\n`)
 	for _, failure in failures do
 		print(`  {failure.path}`)
 		print(`    {failure.message}\n`)
 	end
 end
 
-print(`Итого: {passed} прошло, {failed} упало`)
+print(`Total: {passed} passed, {failed} failed`)
 
 process.exit(if failed > 0 then 1 else 0)

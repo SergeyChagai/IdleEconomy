@@ -1,10 +1,10 @@
 --!strict
 --[[
-	Тесты кошелька.
+	Wallet tests.
 
-	Смысловой центр — то, что баланс невозможно увести в минус и невозможно
-	изменить в обход класса. Отдельно проверяется атомарность: неудачная
-	операция обязана не оставлять следов.
+	The heart of it: a balance cannot be driven negative and cannot be
+	changed behind the class's back. Atomicity is checked separately -- a
+	failed operation must leave no trace.
 ]]
 
 local Wallet = require("../src/shared/Economy/Wallet")
@@ -12,24 +12,24 @@ local Wallet = require("../src/shared/Economy/Wallet")
 return function(t)
 	local describe, it, expect = t.describe, t.it, t.expect
 
-	describe("создание", function()
-		it("пустой кошелёк отдаёт нули", function()
+	describe("construction", function()
+		it("an empty wallet reports zeroes", function()
 			local wallet = Wallet.new()
 			expect(wallet:get("Coins")).toBe(0)
 		end)
 
-		it("принимает стартовый баланс", function()
+		it("accepts a starting balance", function()
 			local wallet = Wallet.new({ Coins = 500, Gems = 10 })
 			expect(wallet:get("Coins")).toBe(500)
 			expect(wallet:get("Gems")).toBe(10)
 		end)
 
 		--[[
-			Сейв мог прийти битым — с NaN, отрицательным числом или мусором
-			после неудачной миграции. Вход в игру от этого падать не должен:
-			лучше обнулить валюту, чем не пустить игрока.
+			A save may arrive corrupt -- NaN, a negative number, or junk left
+			by a failed migration. Joining the game must not fail because of
+			it: zeroing a currency beats locking the player out.
 		]]
-		it("чинит битые значения из сейва вместо падения", function()
+		it("repairs corrupt save values instead of failing", function()
 			local wallet = Wallet.new({ Coins = -100, Gems = 0 / 0, Tickets = math.huge })
 			expect(wallet:get("Coins")).toBe(0)
 			expect(wallet:get("Gems")).toBe(0)
@@ -37,10 +37,10 @@ return function(t)
 		end)
 
 		--[[
-			Если бы конструктор взял ссылку на переданную таблицу, вызывающий
-			код мог бы менять баланс мимо всех проверок.
+			Had the constructor kept a reference to the passed table, the
+			caller could change the balance around every check.
 		]]
-		it("копирует стартовую таблицу, а не берёт ссылку", function()
+		it("copies the initial table rather than referencing it", function()
 			local initial = { Coins = 100 }
 			local wallet = Wallet.new(initial)
 
@@ -51,7 +51,7 @@ return function(t)
 	end)
 
 	describe("add", function()
-		it("начисляет", function()
+		it("credits an amount", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok = wallet:add("Coins", 50)
 
@@ -59,17 +59,17 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(150)
 		end)
 
-		it("создаёт валюту, которой ещё не было", function()
+		it("creates a currency that did not exist yet", function()
 			local wallet = Wallet.new()
 			wallet:add("Gems", 7)
 			expect(wallet:get("Gems")).toBe(7)
 		end)
 
 		--[[
-			Ключевая защита: если бы add принимал минус, любая проверка
-			"хватает ли денег" обходилась бы вызовом add(-amount).
+			The key guard: if add accepted negatives, every "can they afford
+			it" check could be bypassed by calling add(-amount).
 		]]
-		it("отказывает на отрицательной сумме", function()
+		it("rejects a negative amount", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok, err = wallet:add("Coins", -50)
 
@@ -78,7 +78,7 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(100)
 		end)
 
-		it("отказывает на NaN", function()
+		it("rejects NaN", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok = wallet:add("Coins", 0 / 0)
 
@@ -86,7 +86,7 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(100)
 		end)
 
-		it("отказывает на бесконечности", function()
+		it("rejects infinity", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok = wallet:add("Coins", math.huge)
 
@@ -95,10 +95,11 @@ return function(t)
 		end)
 
 		--[[
-			За 2^53 double перестаёт различать соседние целые. Молча уехать
-			туда нельзя: игрок увидит, что покупки не списываются.
+			Past 2^53 a double stops distinguishing adjacent integers. Sliding
+			there silently is not acceptable: the player would see purchases
+			that never deduct.
 		]]
-		it("сообщает о достижении потолка", function()
+		it("reports reaching the balance cap", function()
 			local wallet = Wallet.new({ Coins = 2 ^ 53 })
 			local ok, err = wallet:add("Coins", 1000)
 
@@ -108,7 +109,7 @@ return function(t)
 	end)
 
 	describe("trySpend", function()
-		it("списывает, когда денег хватает", function()
+		it("spends when there is enough", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok = wallet:trySpend("Coins", 30)
 
@@ -116,7 +117,7 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(70)
 		end)
 
-		it("списывает ровно весь баланс", function()
+		it("spends the entire balance exactly", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok = wallet:trySpend("Coins", 100)
 
@@ -125,20 +126,20 @@ return function(t)
 		end)
 
 		--[[
-			Самое важное свойство класса: при нехватке денег баланс не
-			меняется вообще. Частичное списание оставило бы игрока и без
-			денег, и без покупки.
+			The most important property of the class: when funds are short the
+			balance does not change at all. A partial deduction would leave
+			the player without the money and without the purchase.
 		]]
-		it("при нехватке средств не трогает баланс", function()
+		it("leaves the balance untouched when funds are short", function()
 			local wallet = Wallet.new({ Coins = 50 })
 			local ok, err = wallet:trySpend("Coins", 100)
 
 			expect(ok).toBeFalsy()
-			expect(err).toBe("недостаточно средств")
+			expect(err).toBe("insufficient funds")
 			expect(wallet:get("Coins")).toBe(50)
 		end)
 
-		it("не даёт списать с несуществующей валюты", function()
+		it("cannot spend from a currency that does not exist", function()
 			local wallet = Wallet.new()
 			local ok = wallet:trySpend("Coins", 1)
 
@@ -146,7 +147,7 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(0)
 		end)
 
-		it("отказывает на отрицательной сумме", function()
+		it("rejects a negative amount", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local ok = wallet:trySpend("Coins", -50)
 
@@ -154,7 +155,7 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(100)
 		end)
 
-		it("баланс никогда не уходит в минус", function()
+		it("the balance never goes negative", function()
 			local wallet = Wallet.new({ Coins = 10 })
 
 			for _ = 1, 100 do
@@ -166,25 +167,25 @@ return function(t)
 	end)
 
 	describe("has", function()
-		it("подтверждает достаточный баланс", function()
+		it("confirms a sufficient balance", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			expect(wallet:has("Coins", 100)).toBeTruthy()
 			expect(wallet:has("Coins", 99)).toBeTruthy()
 		end)
 
-		it("отклоняет недостаточный баланс", function()
+		it("rejects an insufficient balance", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			expect(wallet:has("Coins", 101)).toBeFalsy()
 		end)
 
-		it("отклоняет некорректную сумму", function()
+		it("rejects an invalid amount", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			expect(wallet:has("Coins", 0 / 0)).toBeFalsy()
 		end)
 	end)
 
 	describe("tryExchange", function()
-		it("проводит обмен целиком", function()
+		it("performs the whole exchange", function()
 			local wallet = Wallet.new({ Gems = 10, Coins = 0 })
 			local ok = wallet:tryExchange("Gems", 5, "Coins", 500)
 
@@ -194,18 +195,18 @@ return function(t)
 		end)
 
 		--[[
-			Атомарность: если списание прошло, а начисление нет, деньги
-			исчезнут. Проверяем, что откат действительно происходит.
+			Atomicity: if the deduction succeeds and the credit does not, the
+			money vanishes. This checks that the rollback really happens.
 		]]
-		it("откатывает списание, если начисление не прошло", function()
+		it("rolls the deduction back when the credit fails", function()
 			local wallet = Wallet.new({ Gems = 10, Coins = 2 ^ 53 })
 			local ok = wallet:tryExchange("Gems", 5, "Coins", 1000)
 
 			expect(ok).toBeFalsy()
-			expect(wallet:get("Gems")).toBe(10) -- гемы на месте
+			expect(wallet:get("Gems")).toBe(10) -- gems still there
 		end)
 
-		it("не обменивает, когда нечего списывать", function()
+		it("does not exchange when there is nothing to deduct", function()
 			local wallet = Wallet.new({ Gems = 1 })
 			local ok = wallet:tryExchange("Gems", 5, "Coins", 500)
 
@@ -216,16 +217,16 @@ return function(t)
 	end)
 
 	describe("serialize", function()
-		it("отдаёт текущий баланс", function()
+		it("returns the current balance", function()
 			local wallet = Wallet.new({ Coins = 100, Gems = 5 })
 			expect(wallet:serialize()).toEqual({ Coins = 100, Gems = 5 })
 		end)
 
 		--[[
-			Снимок уходит в сейв и в аналитику. Если бы это была внутренняя
-			таблица, любой потребитель мог бы изменить баланс.
+			The snapshot goes into saves and analytics. Were it the internal
+			table, any consumer could change the balance.
 		]]
-		it("отдаёт копию, а не внутреннюю таблицу", function()
+		it("returns a copy, not the internal table", function()
 			local wallet = Wallet.new({ Coins = 100 })
 			local snapshot = wallet:serialize()
 
@@ -234,7 +235,7 @@ return function(t)
 			expect(wallet:get("Coins")).toBe(100)
 		end)
 
-		it("переживает цикл сохранения и загрузки", function()
+		it("survives a save/load round trip", function()
 			local original = Wallet.new({ Coins = 1234, Gems = 56 })
 			local restored = Wallet.new(original:serialize())
 

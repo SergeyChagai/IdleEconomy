@@ -1,17 +1,17 @@
 --!strict
 --[[
-	EconomyController — клиентская сторона экономики.
+	EconomyController -- the client side of the economy.
 
-	Контроллер НЕ считает деньги и НЕ решает, хватает ли на покупку. Он
-	показывает то, что прислал сервер, и отправляет намерения. Локальная
-	проверка "хватает ли" тут только ради UI (гасим кнопку), и на неё
-	ничего не завязано: последнее слово всегда за сервером.
+	The controller does NOT compute money and does NOT decide whether a
+	purchase is affordable. It renders what the server sent and dispatches
+	intent. The local affordability check exists purely for the UI (dimming a
+	button); nothing depends on it, the server always has the final word.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Knit = require(ReplicatedStorage.Packages.Knit.Knit)
+local Knit = require(ReplicatedStorage.Packages.Knit)
 
 local Economy = ReplicatedStorage.Shared.Economy
 local Balance = require(Economy.Balance)
@@ -33,13 +33,13 @@ local EconomyController = Knit.CreateController({
 	_rows = {} :: { [string]: { button: TextButton, label: TextLabel } },
 })
 
---[[ Форматирование ]]
+--[[ Formatting ]]
 
 local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi" }
 
---[[ Короткая запись больших чисел: 1234567 -> "1.23M".
+--[[ Short form for large numbers: 1234567 -> "1.23M".
 
-     В idle-играх без этого числа быстро перестают помещаться на кнопку. ]]
+     Without this, idle-game numbers quickly stop fitting on a button. ]]
 local function short(value: number): string
 	if value < 1000 then
 		return string.format("%d", value)
@@ -51,7 +51,7 @@ local function short(value: number): string
 	return string.format("%.2f%s", scaled, SUFFIXES[tier + 1])
 end
 
---[[ Интерфейс ]]
+--[[ Interface ]]
 
 function EconomyController:_buildUi(): ScreenGui
 	local player = Players.LocalPlayer
@@ -79,8 +79,8 @@ function EconomyController:_buildUi(): ScreenGui
 	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = balance
 
-	-- Кнопка ручной добычи: с неё начинается игра, поэтому она крупная
-	-- и лежит по центру, а не в общем списке
+	-- The manual mining button: the game starts here, so it is large and
+	-- centred rather than buried in the upgrade list
 	local mine = Instance.new("TextButton")
 	mine.Name = "Mine"
 	mine.Size = UDim2.fromOffset(220, 220)
@@ -90,14 +90,14 @@ function EconomyController:_buildUi(): ScreenGui
 	mine.TextColor3 = Color3.fromRGB(28, 24, 10)
 	mine.Font = Enum.Font.GothamBold
 	mine.TextSize = 22
-	mine.Text = "ДОБЫТЬ"
+	mine.Text = "MINE"
 	mine.Parent = gui
 
 	local mineCorner = Instance.new("UICorner")
 	mineCorner.CornerRadius = UDim.new(1, 0)
 	mineCorner.Parent = mine
 
-	-- Панель апгрейдов
+	-- Upgrade panel
 	local panel = Instance.new("Frame")
 	panel.Name = "Upgrades"
 	panel.Size = UDim2.fromOffset(300, 240)
@@ -150,18 +150,18 @@ function EconomyController:_render()
 		return
 	end
 
-	self._balance.Text = `{short(state.coins)}  (+{short(state.incomePerSecond)}/с)`
+	self._balance.Text = `{short(state.coins)}  (+{short(state.incomePerSecond)}/s)`
 
 	for id, row in self._rows do
 		local upgrade = EconomyConfig.upgrades[id]
 		local level = state.levels[id] or 0
 		local cost = Balance.upgradeCost(upgrade, level)
 
-		row.button.Text = `{upgrade.displayName}  ур. {level}`
-		row.label.Text = `{short(cost)} монет`
+		row.button.Text = `{upgrade.displayName}  lv. {level}`
+		row.label.Text = `{short(cost)} coins`
 
-		-- Гасим кнопку, когда не хватает. Это ТОЛЬКО подсказка для глаза:
-		-- нажатие всё равно уйдёт на сервер и там будет проверено заново
+		-- Dim the button when it is unaffordable. This is ONLY a visual hint:
+		-- the click still goes to the server and is re-checked there
 		local affordable = state.coins >= cost and level < upgrade.maxLevel
 		row.button.BackgroundColor3 = if affordable
 			then Color3.fromRGB(45, 90, 60)
@@ -169,7 +169,7 @@ function EconomyController:_render()
 	end
 end
 
---[[ Жизненный цикл Knit ]]
+--[[ Knit lifecycle ]]
 
 function EconomyController:KnitStart()
 	local gui = self:_buildUi()
@@ -177,13 +177,13 @@ function EconomyController:KnitStart()
 
 	local EconomyService = Knit.GetService("EconomyService")
 
-	-- Сервер сам присылает состояние при каждом изменении
+	-- The server pushes state on every change
 	EconomyService.StateChanged:Connect(function(state: PublicState)
 		self._state = state
 		self:_render()
 	end)
 
-	-- Стартовое состояние: на момент подписки сервер мог уже всё отправить
+	-- Initial state: the server may have pushed before we subscribed
 	EconomyService:GetState():andThen(function(state: PublicState?)
 		if state then
 			self._state = state
@@ -191,8 +191,8 @@ function EconomyController:KnitStart()
 		end
 	end)
 
-	-- Добыча. Отказ по лимиту частоты в лог не пишем: при быстрых кликах
-	-- это штатный ответ сервера, а не ошибка, и он бы засорил Output
+	-- Mining. Rate-limit rejections are not logged: during fast clicking that
+	-- is a normal server response, not an error, and it would flood Output
 	local mine = gui:WaitForChild("Mine") :: TextButton
 	mine.Activated:Connect(function()
 		EconomyService:Collect()
@@ -200,10 +200,10 @@ function EconomyController:KnitStart()
 
 	for id, row in self._rows do
 		row.button.Activated:Connect(function()
-			-- Отправляем НАМЕРЕНИЕ, а не стоимость. Сервер посчитает цену сам.
+			-- Send INTENT, not a price. The server works the cost out itself.
 			EconomyService:BuyUpgrade(id, 1):andThen(function(ok: boolean, err: string?)
 				if not ok then
-					warn(`покупка отклонена: {err}`)
+					warn(`purchase rejected: {err}`)
 				end
 			end)
 		end)

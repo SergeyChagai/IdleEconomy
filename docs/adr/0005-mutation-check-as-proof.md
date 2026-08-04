@@ -1,4 +1,4 @@
-# ADR-0005: Проверка мутацией как доказательство работоспособности тестов
+# ADR-0005: A mutation check as proof that the tests work
 
 ## Status
 
@@ -6,45 +6,44 @@ Accepted (2026-08-04)
 
 ## Context
 
-Отбор на вакансию требует «работающий код + подтверждение, что он
-работает». Зелёный прогон тестов таким подтверждением не является:
-набор тестов, который ничего не проверяет, тоже зелёный. Утверждения
-вида `expect(result).toBeTruthy()` на функции, всегда возвращающей
-таблицу, проходят всегда.
+The brief asks for "working code plus evidence that it works". A green test
+run is not that evidence: a suite that checks nothing is also green.
+Assertions like `expect(result).toBeTruthy()` against a function that always
+returns a table pass unconditionally.
 
-Проблема усугубляется тем, что раннер написан самостоятельно
-(ADR-0004) и сам не покрыт тестами. Ошибка в раннере, при которой
-падения засчитываются как успехи, внешне неотличима от исправного кода.
+The problem is sharper here because the runner is hand-written (ADR-0004) and
+is not itself covered by tests. A runner bug that counted failures as
+successes would be indistinguishable from healthy code.
 
 ## Decision
 
-Работоспособность набора тестов подтверждается проверкой мутацией:
-в рабочий код вносится осмысленная ошибка, прогон обязан покраснеть,
-после чего ошибка снимается.
+The suite's ability to detect regressions is confirmed by a mutation check: a
+meaningful bug is introduced into working code, the run must turn red, and the
+bug is then removed.
 
-Выполненная проверка: из `Balance.offlineEarnings` убран порог
-`minSeconds` — защита от фарма реконнектом. Результат: упал ровно один
-тест, exit code стал 1. После возврата порога — 90 тестов, exit code 0.
+The check performed: the `minSeconds` threshold -- the reconnect-farming guard
+-- was removed from `Balance.offlineEarnings`. Result: exactly one test
+failed and the exit code became 1. With the threshold restored: 101 tests,
+exit code 0.
 
-Мутация выбирается не случайная, а бьющая по конкретной защите:
-она проверяет и то, что тест существует, и то, что он проверяет
-правильное свойство.
+The mutation is chosen to strike a specific guard rather than at random: it
+verifies both that a test exists and that it checks the right property.
 
 ## Consequences
 
-Положительные:
+Positive:
 
-* Есть воспроизводимое доказательство, что тесты умеют падать.
-* Заодно проверено, что раннер корректно возвращает ненулевой код
-  и что падение одного теста не маскируется остальными.
-* Формулировка «упал ровно один тест» показывает точность покрытия:
-  защита проверяется одним тестом, а не размазана по многим.
+* There is reproducible evidence that the tests are able to fail.
+* It also confirms the runner returns a non-zero exit code correctly and that
+  one failing test is not masked by the rest.
+* "Exactly one test failed" demonstrates precision of coverage: the guard is
+  checked by one test rather than smeared across many.
 
-Отрицательные:
+Negative:
 
-* Проверка ручная и разовая. Она не повторяется автоматически и
-  устаревает по мере роста кода.
-* Полноценный mutation testing (Stryker и аналоги) для Luau
-  недоступен, автоматизировать это сейчас нечем.
-* Требует дисциплины: при добавлении новой защиты проверку нужно
-  повторять вручную, иначе смысл теряется.
+* The check is manual and one-off. It does not repeat automatically and goes
+  stale as the code grows.
+* Full mutation testing (Stryker and similar) is not available for Luau, so
+  there is nothing to automate this with right now.
+* It requires discipline: every new guard needs the check repeated by hand,
+  otherwise the practice loses its meaning.
