@@ -39,13 +39,16 @@ Goal: player progress survives a server restart and offline income is credited
 - [x] Migration tests: old versions, corrupt data, missing keys
 - [x] Refuse to downgrade a save written by a newer build
 - [x] ProfileStore as a Wally server-dependency (lm-loleris/profilestore)
-- [ ] Load and save through ProfileStore
-- [ ] Autosave on a timer and on player exit
-- [ ] Credit offline income on join via Balance.offlineEarnings
+- [x] Load and save through ProfileStore
+- [x] Autosave, plus an ordered flush before the session is released
+- [x] Credit offline income on join via Balance.offlineEarnings
 - [x] Offline window guard: a consumed window is never paid twice
 - [x] Tests: a repeated load does not double the offline payout
 
-Sprint 3 status: in progress
+Sprint 3 status: closed
+
+Not covered by tests: DataService and the persistence wiring inside
+EconomyService need the engine. They are Sprint 5 material (TestEZ in Studio).
 
 ## Sprint 4 — Monetisation
 
