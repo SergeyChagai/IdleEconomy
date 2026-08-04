@@ -13,6 +13,10 @@ exclude = ["**"]
 # evening, not a saved minute.
 Knit = "sleitnick/knit@1.7.0"
 
+# Studio-only suite (Sprint 5). Lives in Packages so Rojo can sync it; the
+# console suite still uses the hand-written Lune runner (ADR-0004).
+TestEZ = "roblox/testez@0.4.1"
+
 [server-dependencies]
 # DataStore persistence with session locking. Declared as a server dependency
 # because the package itself is realm = "server": save data must never be

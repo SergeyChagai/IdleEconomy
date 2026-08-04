@@ -15,6 +15,15 @@ Exit code `0` — green, `1` — failures, `127` — runtime not found. CI-ready
 Requires [Lune](https://github.com/lune-org/lune/releases), a standalone Luau
 runtime. The script looks for it on `PATH`, or at `LUNE_PATH`.
 
+Studio-bound services (`EconomyService`, `EconomyController`) are covered by
+TestEZ under `tests/studio/`. Serve the test project and Play:
+
+```bash
+rojo serve test.project.json
+```
+
+`test-all.bat` runs the console suite and prints the Studio steps.
+
 Dependencies are managed by [Wally](https://wally.run):
 
 ```bash
@@ -162,8 +171,9 @@ migration and backups are a separate system of comparable size.
 boost the offline window. Set real asset ids in `MonetisationConfig` (zeros are
 treated as unconfigured).
 
-**Server-layer tests.** The pure modules are covered. `EconomyService` and
-`EconomyController` need the engine -- that calls for TestEZ inside Studio.
+**Server-layer tests.** Pure modules stay on the Lune runner (ADR-0004).
+Engine-bound services use TestEZ in Studio via `test.project.json` /
+`test-all.bat` (Sprint 5).
 
 ---
 

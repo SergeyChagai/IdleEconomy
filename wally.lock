@@ -13,9 +13,14 @@ version = "1.0.3"
 dependencies = []
 
 [[package]]
+name = "roblox/testez"
+version = "0.4.1"
+dependencies = []
+
+[[package]]
 name = "sergeychagai/idle-economy"
 version = "0.1.0"
-dependencies = [["Knit", "sleitnick/knit@1.7.0"], ["ProfileStore", "lm-loleris/profilestore@1.0.3"]]
+dependencies = [["Knit", "sleitnick/knit@1.7.0"], ["TestEZ", "roblox/testez@0.4.1"], ["ProfileStore", "lm-loleris/profilestore@1.0.3"]]
 
 [[package]]
 name = "sleitnick/comm"

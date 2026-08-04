@@ -69,9 +69,12 @@ Creator Dashboard ids before publishing. A zero id is ignored at runtime.
 
 Goal: close the last blind spot in coverage
 
-- [ ] TestEZ inside Studio
-- [ ] EconomyService tests against real instances
-- [ ] EconomyController tests
-- [ ] Run both suites with a single command
+- [x] TestEZ inside Studio
+- [x] EconomyService tests against real instances
+- [x] EconomyController tests
+- [x] Run both suites with a single command
 
-Sprint 5 status: planned
+Sprint 5 status: closed
+
+Console suite: `test.bat` (Lune). Studio suite: `rojo serve test.project.json`
+then Play. Both: `test-all.bat`.
