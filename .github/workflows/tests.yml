@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  console:
+    name: Console suite (test.bat / Lune)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lune
+        env:
+          LUNE_VERSION: "0.10.5"
+        run: |
+          set -euo pipefail
+          asset="lune-${LUNE_VERSION}-linux-x86_64.zip"
+          url="https://github.com/lune-org/lune/releases/download/v${LUNE_VERSION}/${asset}"
+          curl -fsSL "$url" -o lune.zip
+          unzip -q lune.zip
+          chmod +x lune
+          sudo mv lune /usr/local/bin/lune
+          lune --version
+
+      - name: Run unit tests
+        # Equivalent to test.bat on Windows: same entry point, same exit codes.
+        run: lune run tests/run

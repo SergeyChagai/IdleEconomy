@@ -30,6 +30,8 @@ local MonetisationService = Knit.CreateService({
 
 	_dataService = nil :: any,
 	_economyService = nil :: any,
+
+	Client = {},
 })
 
 --[[ Catalog lookups ]]
@@ -46,6 +48,29 @@ local function productById(productId: number): (string?, MonetisationConfig.Prod
 	end
 
 	return nil, nil
+end
+
+local function warnIncompleteCatalog()
+	local missing = {}
+	for key, pass in MonetisationConfig.gamepasses do
+		if pass.id == 0 then
+			table.insert(missing, `gamepass:{key}`)
+		end
+	end
+	for key, product in MonetisationConfig.products do
+		if product.productId == 0 then
+			table.insert(missing, `product:{key}`)
+		end
+	end
+	if #missing > 0 then
+		warn(
+			"[Monetisation] catalog incomplete — paste Creator Dashboard ids into "
+				.. "MonetisationConfig.luau (see docs/monetisation.md): "
+				.. table.concat(missing, ", ")
+		)
+	else
+		print("[Monetisation] catalog configured")
+	end
 end
 
 local function emit(event: PurchaseAnalytics.ReceiptEvent)
@@ -162,11 +187,55 @@ function MonetisationService:_processReceipt(receiptInfo: any): Enum.ProductPurc
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
+--[[ Client prompts — intent only; MarketplaceService owns the purchase UI ]]
+
+function MonetisationService:PromptGamepass(player: Player, key: string): (boolean, string?)
+	local pass = MonetisationConfig.gamepasses[key]
+	if not pass then
+		return false, "unknown gamepass"
+	end
+	if pass.id == 0 then
+		return false, "gamepass id not configured (see docs/monetisation.md)"
+	end
+
+	MarketplaceService:PromptGamePassPurchase(player, pass.id)
+	return true, nil
+end
+
+function MonetisationService:PromptProduct(player: Player, key: string): (boolean, string?)
+	local product = MonetisationConfig.products[key]
+	if not product then
+		return false, "unknown product"
+	end
+	if product.productId == 0 then
+		return false, "product id not configured (see docs/monetisation.md)"
+	end
+
+	MarketplaceService:PromptProductPurchase(player, product.productId)
+	return true, nil
+end
+
+function MonetisationService.Client:PromptGamepass(player: Player, key: unknown)
+	if type(key) ~= "string" then
+		return false, "invalid gamepass key"
+	end
+	return self.Server:PromptGamepass(player, key)
+end
+
+function MonetisationService.Client:PromptProduct(player: Player, key: unknown)
+	if type(key) ~= "string" then
+		return false, "invalid product key"
+	end
+	return self.Server:PromptProduct(player, key)
+end
+
 --[[ Knit lifecycle ]]
 
 function MonetisationService:KnitStart()
 	self._dataService = Knit.GetService("DataService")
 	self._economyService = Knit.GetService("EconomyService")
+
+	warnIncompleteCatalog()
 
 	MarketplaceService.ProcessReceipt = function(receiptInfo)
 		return self:_processReceipt(receiptInfo)

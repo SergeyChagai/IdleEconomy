@@ -78,3 +78,14 @@ Sprint 5 status: closed
 
 Console suite: `test.bat` (Lune). Studio suite: `rojo serve test.project.json`
 then Play. Both: `test-all.bat`.
+
+## Post-roadmap — Ship polish
+
+- [x] Monetisation setup docs + zero-id guards / shop prompts
+  (`docs/monetisation.md`, `MonetisationService`)
+- [x] Architecture map + ADR-0006 (`docs/architecture.md`)
+- [x] HUD: prestige, offline toast, shop panel
+- [x] GitHub Actions console CI (`.github/workflows/tests.yml`)
+
+Live catalog ids still require Creator Dashboard paste — see
+[monetisation.md](monetisation.md).
