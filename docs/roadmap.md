@@ -54,13 +54,16 @@ EconomyService need the engine. They are Sprint 5 material (TestEZ in Studio).
 
 Goal: Robux purchases are credited exactly once
 
-- [ ] Idempotent ProcessReceipt with PurchaseId history
-- [ ] Gamepasses: income multiplier and extended offline cap
-- [ ] Dev products: currency bundles
-- [ ] Purchase analytics
-- [ ] Idempotency tests: replay, race, restart between attempts
+- [x] Idempotent ProcessReceipt with PurchaseId history
+- [x] Gamepasses: income multiplier and extended offline cap
+- [x] Dev products: currency bundles
+- [x] Purchase analytics
+- [x] Idempotency tests: replay, race, restart between attempts
 
-Sprint 4 status: planned
+Sprint 4 status: closed
+
+Catalog ids in `MonetisationConfig` are placeholders (`0`). Replace them with
+Creator Dashboard ids before publishing. A zero id is ignored at runtime.
 
 ## Sprint 5 — Server-layer tests
 

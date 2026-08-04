@@ -29,12 +29,16 @@
 	      player has ever earned (the prestige threshold is measured against
 	      it) and when they were last seen.
 	          { version, coins, levels, prestigeCount, lifetimeEarned, lastSeen }
+
+	  v4  monetisation: a PurchaseId ledger (so ProcessReceipt is idempotent)
+	      and owned gamepass flags keyed by logical id from MonetisationConfig.
+	          { ...v3 fields, processedPurchases, ownedPasses }
 ]]
 
 local Profile = {}
 
 -- The version this build writes. Bump it together with a new migration step.
-Profile.CURRENT_VERSION = 3
+Profile.CURRENT_VERSION = 4
 
 export type Profile = {
 	version: number,
@@ -47,6 +51,11 @@ export type Profile = {
 	-- Unix time of the last exit. 0 means "never seen", which must NOT be
 	-- read as "away since 1970".
 	lastSeen: number,
+	-- Developer-product PurchaseIds already granted. Bounded by
+	-- MonetisationConfig.purchaseHistoryLimit in the ledger helper.
+	processedPurchases: { string },
+	-- Logical gamepass keys the player owns (refreshed from MarketplaceService).
+	ownedPasses: { [string]: boolean },
 }
 
 export type Action = "fresh" | "current" | "migrated" | "refused"
@@ -113,6 +122,8 @@ function Profile.default(upgradeIds: { string }): Profile
 		prestigeCount = 0,
 		lifetimeEarned = 0,
 		lastSeen = 0,
+		processedPurchases = {},
+		ownedPasses = {},
 	}
 end
 
@@ -165,10 +176,26 @@ local function migrate2to3(raw: { [string]: any }): { [string]: any }
 	return raw
 end
 
+--[[
+	v3 -> v4: purchase ledger and gamepass flags.
+
+	Both start empty. Ownership is re-checked against MarketplaceService on
+	join; the save only remembers what we already decided, so a revoked
+	pass can be cleared on the next refresh.
+]]
+local function migrate3to4(raw: { [string]: any }): { [string]: any }
+	raw.processedPurchases = {}
+	raw.ownedPasses = {}
+	raw.version = 4
+
+	return raw
+end
+
 -- Indexed by the version being migrated FROM
 local STEPS: { [number]: ({ [string]: any }) -> { [string]: any } } = {
 	[1] = migrate1to2,
 	[2] = migrate2to3,
+	[3] = migrate3to4,
 }
 
 --[[ Finalisation ]]
@@ -200,6 +227,24 @@ local function finalize(raw: { [string]: any }, upgradeIds: { string }): Profile
 		end
 	end
 
+	local processedPurchases: { string } = {}
+	if type(raw.processedPurchases) == "table" then
+		for _, id in raw.processedPurchases :: { any } do
+			if type(id) == "string" and id ~= "" then
+				table.insert(processedPurchases, id)
+			end
+		end
+	end
+
+	local ownedPasses: { [string]: boolean } = {}
+	if type(raw.ownedPasses) == "table" then
+		for key, value in raw.ownedPasses :: { [string]: any } do
+			if type(key) == "string" and value == true then
+				ownedPasses[key] = true
+			end
+		end
+	end
+
 	return {
 		version = Profile.CURRENT_VERSION,
 		coins = safeNumber(raw.coins, 0),
@@ -207,6 +252,8 @@ local function finalize(raw: { [string]: any }, upgradeIds: { string }): Profile
 		prestigeCount = math.floor(safeNumber(raw.prestigeCount, 0)),
 		lifetimeEarned = safeNumber(raw.lifetimeEarned, 0),
 		lastSeen = safeNumber(raw.lastSeen, 0),
+		processedPurchases = processedPurchases,
+		ownedPasses = ownedPasses,
 	}
 end
 
@@ -234,6 +281,11 @@ end
 	    re-anchored to `now` instead of producing a negative duration.
 ]]
 function Profile.consumeOfflineWindow(profile: Profile, now: number): (number, Profile)
+	local ownedPasses: { [string]: boolean } = {}
+	for key, value in profile.ownedPasses do
+		ownedPasses[key] = value
+	end
+
 	local updated: Profile = {
 		version = profile.version,
 		coins = profile.coins,
@@ -241,6 +293,8 @@ function Profile.consumeOfflineWindow(profile: Profile, now: number): (number, P
 		prestigeCount = profile.prestigeCount,
 		lifetimeEarned = profile.lifetimeEarned,
 		lastSeen = profile.lastSeen,
+		processedPurchases = table.clone(profile.processedPurchases),
+		ownedPasses = ownedPasses,
 	}
 
 	-- A nonsense clock reading must not be written into the save: stamping it

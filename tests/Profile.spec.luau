@@ -36,6 +36,8 @@ return function(t)
 			expect(profile.coins).toBe(0)
 			expect(profile.prestigeCount).toBe(0)
 			expect(profile.lifetimeEarned).toBe(0)
+			expect(#profile.processedPurchases).toBe(0)
+			expect(next(profile.ownedPasses)).toBe(nil)
 		end)
 
 		--[[
@@ -116,17 +118,17 @@ return function(t)
 		end)
 	end)
 
-	describe("load: v1 -> v3", function()
+	describe("load: v1 -> v4", function()
 		local function v1Profile()
 			return { version = 1, coins = 1234, pickaxeLevel = 7, backpackLevel = 3 }
 		end
 
-		it("applies both migration steps", function()
+		it("applies all three migration steps", function()
 			local _, report = Profile.load(v1Profile(), UPGRADE_IDS)
 
 			expect(report.action).toBe("migrated")
 			expect(report.fromVersion).toBe(1)
-			expect(report.steps).toBe(2)
+			expect(report.steps).toBe(3)
 		end)
 
 		it("moves the flat level fields into the levels table", function()
@@ -168,7 +170,7 @@ return function(t)
 		end)
 	end)
 
-	describe("load: v2 -> v3", function()
+	describe("load: v2 -> v4", function()
 		local function v2Profile()
 			return {
 				version = 2,
@@ -178,11 +180,11 @@ return function(t)
 			}
 		end
 
-		it("applies exactly one step", function()
+		it("applies two migration steps", function()
 			local _, report = Profile.load(v2Profile(), UPGRADE_IDS)
 
 			expect(report.action).toBe("migrated")
-			expect(report.steps).toBe(1)
+			expect(report.steps).toBe(2)
 		end)
 
 		it("preserves levels and prestige", function()
@@ -372,6 +374,40 @@ return function(t)
 			Profile.consumeOfflineWindow(original, 4600)
 
 			expect(original.lastSeen).toBe(1000)
+		end)
+	end)
+
+	describe("load: v3 -> v4", function()
+		local function v3Profile()
+			return {
+				version = 3,
+				coins = 200,
+				levels = { Pickaxe = 3 },
+				prestigeCount = 1,
+				lifetimeEarned = 500,
+				lastSeen = 1_700_000_000,
+			}
+		end
+
+		it("applies exactly one step", function()
+			local _, report = Profile.load(v3Profile(), UPGRADE_IDS)
+			expect(report.steps).toBe(1)
+			expect(report.action).toBe("migrated")
+		end)
+
+		it("adds an empty purchase ledger and pass set", function()
+			local profile = Profile.load(v3Profile(), UPGRADE_IDS)
+			expect(profile.version).toBe(4)
+			expect(#profile.processedPurchases).toBe(0)
+			expect(next(profile.ownedPasses)).toBe(nil)
+		end)
+
+		it("keeps economy fields intact", function()
+			local profile = Profile.load(v3Profile(), UPGRADE_IDS)
+			expect(profile.coins).toBe(200)
+			expect(profile.levels.Pickaxe).toBe(3)
+			expect(profile.lifetimeEarned).toBe(500)
+			expect(profile.lastSeen).toBe(1_700_000_000)
 		end)
 	end)
 

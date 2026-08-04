@@ -39,11 +39,16 @@ src/
     Wallet.luau              OOP wallet class with validation
     Validate.luau            remote input validation
     RateLimiter.luau         token bucket against autoclickers
+    PurchaseLedger.luau      PurchaseId history for receipt idempotency
+    PurchaseAnalytics.luau   receipt event builders
+    MonetisationConfig.luau  product / gamepass catalog
 
   server/
     Bootstrap.server.luau    Knit service registration
     Services/
       EconomyService.luau    state owner, server API
+      DataService.luau       ProfileStore sessions
+      MonetisationService.luau ProcessReceipt + gamepass refresh
 
   client/
     Bootstrap.client.luau    Knit controller registration
@@ -152,9 +157,10 @@ Then in Studio: the `PLUGINS` tab → `Rojo` → `Connect` → `Play`.
 places for profile load and save are marked in code. ProfileStore, key
 migration and backups are a separate system of comparable size.
 
-**Monetisation.** `Balance.offlineEarnings` already takes a gamepass flag and
-applies it to both the cap and the rate, but `MarketplaceService`,
-`ProcessReceipt` and purchase idempotency are not implemented.
+**Monetisation.** Developer products go through `MonetisationService` /
+`ProcessReceipt` with a PurchaseId ledger; gamepasses multiply income and can
+boost the offline window. Set real asset ids in `MonetisationConfig` (zeros are
+treated as unconfigured).
 
 **Server-layer tests.** The pure modules are covered. `EconomyService` and
 `EconomyController` need the engine -- that calls for TestEZ inside Studio.

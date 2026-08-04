@@ -22,6 +22,7 @@ local Knit = require(ReplicatedStorage.Packages.Knit)
 local Economy = ReplicatedStorage.Shared.Economy
 local Balance = require(Economy.Balance)
 local EconomyConfig = require(Economy.EconomyConfig)
+local MonetisationConfig = require(Economy.MonetisationConfig)
 local RateLimiter = require(Economy.RateLimiter)
 local Validate = require(Economy.Validate)
 local Wallet = require(Economy.Wallet)
@@ -39,6 +40,12 @@ type PlayerState = {
 	-- One limiter per player: a shared one would let a single exploiter
 	-- lock mining for everyone on the server
 	clickLimiter: RateLimiter.RateLimiter,
+	-- Logical gamepass keys currently owned
+	ownedPasses: { [string]: boolean },
+	-- Product of configured gamepass income multipliers (1 when none)
+	gamepassIncomeMultiplier: number,
+	-- Any owned pass with boostsOffline
+	offlineBoosted: boolean,
 }
 
 export type PublicState = {
@@ -49,6 +56,7 @@ export type PublicState = {
 	prestigeRequirement: number,
 	lifetimeEarned: number,
 	incomePerSecond: number,
+	gamepassIncomeMultiplier: number,
 }
 
 local EconomyService = Knit.CreateService({
@@ -75,11 +83,39 @@ local EconomyService = Knit.CreateService({
 	Unknown ids stay untouched in the profile itself -- see the note in
 	Data/Profile.luau on why removed upgrades are not deleted from a save.
 ]]
+local function entitlementsFromPasses(ownedPasses: { [string]: boolean }): (number, boolean)
+	local incomeMultiplier = 1
+	local offlineBoosted = false
+
+	for key, owned in ownedPasses do
+		if owned then
+			local pass = MonetisationConfig.gamepasses[key]
+			if pass then
+				if pass.incomeMultiplier > 0 then
+					incomeMultiplier *= pass.incomeMultiplier
+				end
+				if pass.boostsOffline then
+					offlineBoosted = true
+				end
+			end
+		end
+	end
+
+	return incomeMultiplier, offlineBoosted
+end
+
 local function stateFromProfile(data: Profile.Profile): PlayerState
 	local levels: { [string]: number } = {}
 	for id in EconomyConfig.upgrades do
 		levels[id] = data.levels[id] or 0
 	end
+
+	local ownedPasses: { [string]: boolean } = {}
+	for key, value in data.ownedPasses do
+		ownedPasses[key] = value
+	end
+
+	local incomeMultiplier, offlineBoosted = entitlementsFromPasses(ownedPasses)
 
 	return {
 		wallet = Wallet.new({ [CURRENCY] = data.coins }),
@@ -91,6 +127,9 @@ local function stateFromProfile(data: Profile.Profile): PlayerState
 			EconomyConfig.click.refillPerSecond,
 			os.clock()
 		),
+		ownedPasses = ownedPasses,
+		gamepassIncomeMultiplier = incomeMultiplier,
+		offlineBoosted = offlineBoosted,
 	}
 end
 
@@ -105,6 +144,7 @@ end
      the client would receive fields it has no business knowing. ]]
 function EconomyService:_publicState(state: PlayerState): PublicState
 	local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
+		* state.gamepassIncomeMultiplier
 
 	local levels: { [string]: number } = {}
 	for id, level in state.levels do
@@ -115,7 +155,7 @@ function EconomyService:_publicState(state: PlayerState): PublicState
 		coins = state.wallet:get(CURRENCY),
 		levels = levels,
 		prestigeCount = state.prestigeCount,
-		prestigeMultiplier = multiplier,
+		prestigeMultiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount),
 		prestigeRequirement = Balance.prestigeRequirement(
 			EconomyConfig.prestige,
 			state.prestigeCount
@@ -126,6 +166,7 @@ function EconomyService:_publicState(state: PlayerState): PublicState
 			state.levels,
 			multiplier
 		),
+		gamepassIncomeMultiplier = state.gamepassIncomeMultiplier,
 	}
 end
 
@@ -153,6 +194,63 @@ function EconomyService:_syncToProfile(player: Player, state: PlayerState)
 	for id, level in state.levels do
 		data.levels[id] = level
 	end
+
+	local ownedPasses: { [string]: boolean } = {}
+	for key, value in state.ownedPasses do
+		ownedPasses[key] = value
+	end
+	data.ownedPasses = ownedPasses
+end
+
+--[[
+	Apply gamepass entitlements resolved by MonetisationService.
+
+	Called on join (and whenever ownership is refreshed). Multipliers take
+	effect on the next income tick and on any subsequent offline credit.
+]]
+function EconomyService:ApplyEntitlements(player: Player, ownedPasses: { [string]: boolean })
+	local state = self:_getState(player)
+	local incomeMultiplier, offlineBoosted = entitlementsFromPasses(ownedPasses)
+
+	local copied: { [string]: boolean } = {}
+	for key, value in ownedPasses do
+		copied[key] = value
+	end
+
+	if state then
+		state.ownedPasses = copied
+		state.gamepassIncomeMultiplier = incomeMultiplier
+		state.offlineBoosted = offlineBoosted
+		self:_push(player)
+	end
+
+	-- Profile may already be loaded while economy state is still spinning up;
+	-- keep the save current either way
+	local data = self._dataService and self._dataService:GetData(player)
+	if data then
+		data.ownedPasses = copied
+	end
+end
+
+--[[
+	Credit coins from a developer product. Server-only; never exposed as a
+	remote. Returns false when the player has no economy state yet so
+	ProcessReceipt can retry with NotProcessedYet.
+]]
+function EconomyService:GrantCoins(player: Player, amount: number): (boolean, string?)
+	local state = self:_getState(player)
+	if not state then
+		return false, "player economy is not loaded"
+	end
+
+	if type(amount) ~= "number" or amount ~= amount or amount <= 0 or amount == math.huge then
+		return false, "invalid grant amount"
+	end
+
+	state.wallet:add(CURRENCY, amount)
+	state.lifetimeEarned += amount
+	self:_push(player)
+	return true, nil
 end
 
 function EconomyService:_push(player: Player)
@@ -234,6 +332,7 @@ function EconomyService:Collect(player: Player): (boolean, string?)
 	end
 
 	local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
+		* state.gamepassIncomeMultiplier
 	local reward = EconomyConfig.click.baseValue * multiplier
 
 	local ok, err = state.wallet:add(CURRENCY, reward)
@@ -310,6 +409,7 @@ end
 function EconomyService:_tick(deltaTime: number)
 	for player, state in self._states do
 		local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
+			* state.gamepassIncomeMultiplier
 		local rate = Balance.totalIncomePerSecond(EconomyConfig.upgrades, state.levels, multiplier)
 
 		if rate > 0 then
@@ -366,14 +466,14 @@ function EconomyService:_creditOffline(player: Player, data: Profile.Profile, st
 	end
 
 	local multiplier = Balance.prestigeMultiplier(EconomyConfig.prestige, state.prestigeCount)
+		* state.gamepassIncomeMultiplier
 	local rate = Balance.totalIncomePerSecond(EconomyConfig.upgrades, state.levels, multiplier)
 
-	-- Gamepasses are not implemented yet; the flag is wired for when they are
 	local earned, creditedSeconds = Balance.offlineEarnings(
 		EconomyConfig.offline,
 		rate,
 		elapsed,
-		false
+		state.offlineBoosted
 	)
 
 	if earned <= 0 then
