@@ -12,3 +12,14 @@ profile.svg
 
 # Time trace
 trace.json
+
+# Собранное место — артефакт `rojo build`, восстанавливается из исходников
+*.rbxl
+*.rbxlx
+
+# Карта проекта для luau-lsp — генерируется `rojo sourcemap`
+sourcemap.json
+
+# Локальное состояние Meronq: база памяти и снимки, привязаны к машине
+.meronq/local/*
+!.meronq/local/.gitkeep
