@@ -1,6 +1,6 @@
 {
-  "name": "Roblox",
+  "name": "IdleEconomy",
   "private": true,
-  "version": "0.0.0",
-  "description": "Engineering project tracked by Meronq."
+  "version": "0.1.0",
+  "description": "Roblox idle economy take-home — tracked by Meronq CEM."
 }

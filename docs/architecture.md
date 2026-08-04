@@ -4,6 +4,9 @@ IdleEconomy is a Roblox idle game economy: pure math under test in Lune,
 engine-bound services on Knit, persistence via ProfileStore, monetisation
 via MarketplaceService.
 
+**Hiring / take-home entry point:** [playbook.md](playbook.md).
+Service map below; decisions in [adr/](adr/).
+
 ## Layers
 
 ```

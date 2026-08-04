@@ -3,6 +3,8 @@
 Project: an economy and progression system for Roblox (Luau + Rojo + Knit).
 Closed sprints record what was actually done, not what was planned.
 
+**For hiring reviewers:** start at [playbook.md](playbook.md), not this file.
+
 ## Sprint 1 — Economy core
 
 Goal: pure economy math covered by tests that run without Studio
