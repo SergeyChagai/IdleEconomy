@@ -25,6 +25,7 @@ type PublicState = {
 	prestigeRequirement: number,
 	lifetimeEarned: number,
 	incomePerSecond: number,
+	gamepassIncomeMultiplier: number,
 }
 
 local EconomyController = Knit.CreateController({

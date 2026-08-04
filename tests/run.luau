@@ -18,6 +18,8 @@ local specs = {
 	Validate = require("./Validate.spec"),
 	RateLimiter = require("./RateLimiter.spec"),
 	Profile = require("./Profile.spec"),
+	PurchaseLedger = require("./PurchaseLedger.spec"),
+	PurchaseAnalytics = require("./PurchaseAnalytics.spec"),
 }
 
 print("Economy test suite\n" .. string.rep("=", 50))

@@ -15,6 +15,15 @@ Exit code `0` — green, `1` — failures, `127` — runtime not found. CI-ready
 Requires [Lune](https://github.com/lune-org/lune/releases), a standalone Luau
 runtime. The script looks for it on `PATH`, or at `LUNE_PATH`.
 
+Studio-bound services (`EconomyService`, `EconomyController`) are covered by
+TestEZ under `tests/studio/`. Serve the test project and Play:
+
+```bash
+rojo serve test.project.json
+```
+
+`test-all.bat` runs the console suite and prints the Studio steps.
+
 Dependencies are managed by [Wally](https://wally.run):
 
 ```bash
@@ -39,11 +48,16 @@ src/
     Wallet.luau              OOP wallet class with validation
     Validate.luau            remote input validation
     RateLimiter.luau         token bucket against autoclickers
+    PurchaseLedger.luau      PurchaseId history for receipt idempotency
+    PurchaseAnalytics.luau   receipt event builders
+    MonetisationConfig.luau  product / gamepass catalog
 
   server/
     Bootstrap.server.luau    Knit service registration
     Services/
       EconomyService.luau    state owner, server API
+      DataService.luau       ProfileStore sessions
+      MonetisationService.luau ProcessReceipt + gamepass refresh
 
   client/
     Bootstrap.client.luau    Knit controller registration
@@ -152,12 +166,14 @@ Then in Studio: the `PLUGINS` tab → `Rojo` → `Connect` → `Play`.
 places for profile load and save are marked in code. ProfileStore, key
 migration and backups are a separate system of comparable size.
 
-**Monetisation.** `Balance.offlineEarnings` already takes a gamepass flag and
-applies it to both the cap and the rate, but `MarketplaceService`,
-`ProcessReceipt` and purchase idempotency are not implemented.
+**Monetisation.** Developer products go through `MonetisationService` /
+`ProcessReceipt` with a PurchaseId ledger; gamepasses multiply income and can
+boost the offline window. Set real asset ids in `MonetisationConfig` (zeros are
+treated as unconfigured).
 
-**Server-layer tests.** The pure modules are covered. `EconomyService` and
-`EconomyController` need the engine -- that calls for TestEZ inside Studio.
+**Server-layer tests.** Pure modules stay on the Lune runner (ADR-0004).
+Engine-bound services use TestEZ in Studio via `test.project.json` /
+`test-all.bat` (Sprint 5).
 
 ---
 

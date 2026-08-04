@@ -43,3 +43,7 @@ Negative:
   partial safeguard is the mutation check (ADR-0005).
 * As the suite grows the limitations will start to show, and the runner will
   have to be either extended or replaced with TestEZ.
+
+Update (Sprint 5): TestEZ was added for the **engine-bound** layer only
+(`tests/studio/`, `test.project.json`). The console suite for pure modules
+still uses this runner -- the two stacks are intentional, not a migration.

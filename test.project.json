@@ -1,0 +1,82 @@
+{
+  "name": "IdleEconomyTests",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Packages": {
+        "$path": "Packages"
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Server": {
+        "$path": "src/server"
+      },
+      "ServerPackages": {
+        "$path": "ServerPackages"
+      },
+      "StudioTests": {
+        "$path": "tests/studio/server"
+      },
+      "StudioTestRunner": {
+        "$path": "tests/studio/run.server.luau"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": "src/client"
+        },
+        "StudioTests": {
+          "$path": "tests/studio/client"
+        },
+        "StudioTestRunner": {
+          "$path": "tests/studio/run.client.luau"
+        }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "Gravity": 196.2
+      },
+
+      "Baseplate": {
+        "$className": "Part",
+        "$properties": {
+          "Size": [512, 20, 512],
+          "Position": [0, -10, 0],
+          "Anchored": true,
+          "Locked": true,
+          "Color": [0.39, 0.5, 0.28],
+          "Material": "Grass",
+          "TopSurface": "Smooth",
+          "BottomSurface": "Smooth"
+        }
+      },
+
+      "SpawnLocation": {
+        "$className": "SpawnLocation",
+        "$properties": {
+          "Size": [12, 1, 12],
+          "Position": [0, 0.5, 0],
+          "Anchored": true
+        }
+      }
+    },
+
+    "Lighting": {
+      "$className": "Lighting"
+    }
+  }
+}
