@@ -17,6 +17,7 @@ local specs = {
 	Wallet = require("./Wallet.spec"),
 	Validate = require("./Validate.spec"),
 	RateLimiter = require("./RateLimiter.spec"),
+	Profile = require("./Profile.spec"),
 }
 
 print("Economy test suite\n" .. string.rep("=", 50))
