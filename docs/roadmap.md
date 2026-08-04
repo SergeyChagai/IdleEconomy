@@ -38,11 +38,12 @@ Goal: player progress survives a server restart and offline income is credited
 - [x] Key migration between schema versions
 - [x] Migration tests: old versions, corrupt data, missing keys
 - [x] Refuse to downgrade a save written by a newer build
-- [ ] Vendor ProfileStore (not published to Wally) with an ADR
+- [x] ProfileStore as a Wally server-dependency (lm-loleris/profilestore)
 - [ ] Load and save through ProfileStore
 - [ ] Autosave on a timer and on player exit
 - [ ] Credit offline income on join via Balance.offlineEarnings
-- [ ] Tests: a repeated load does not double the offline payout
+- [x] Offline window guard: a consumed window is never paid twice
+- [x] Tests: a repeated load does not double the offline payout
 
 Sprint 3 status: in progress
 

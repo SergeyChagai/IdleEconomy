@@ -290,6 +290,91 @@ return function(t)
 		end)
 	end)
 
+	describe("consumeOfflineWindow", function()
+		local function profileLastSeenAt(lastSeen: number)
+			local p = Profile.default(UPGRADE_IDS)
+			p.lastSeen = lastSeen
+			return p
+		end
+
+		it("reports the time between the last exit and now", function()
+			local elapsed = Profile.consumeOfflineWindow(profileLastSeenAt(1000), 4600)
+			expect(elapsed).toBe(3600)
+		end)
+
+		it("stamps lastSeen with the current time", function()
+			local _, updated = Profile.consumeOfflineWindow(profileLastSeenAt(1000), 4600)
+			expect(updated.lastSeen).toBe(4600)
+		end)
+
+		--[[
+			The reason this function exists. A rejoin, a retry or a duplicated
+			load must not pay for the same stretch of time twice, whatever the
+			economy config says that time is worth.
+		]]
+		it("pays nothing for a window already consumed", function()
+			local first, afterFirst = Profile.consumeOfflineWindow(profileLastSeenAt(1000), 4600)
+			local second = Profile.consumeOfflineWindow(afterFirst, 4600)
+
+			expect(first).toBe(3600)
+			expect(second).toBe(0)
+		end)
+
+		it("only pays for time accrued since the last consume", function()
+			local _, afterFirst = Profile.consumeOfflineWindow(profileLastSeenAt(1000), 4600)
+			local second = Profile.consumeOfflineWindow(afterFirst, 4900)
+
+			expect(second).toBe(300)
+		end)
+
+		--[[
+			lastSeen = 0 means "never seen", not "away since the epoch". A new
+			or freshly migrated player would otherwise be handed a payout for
+			fifty-odd years.
+		]]
+		it("pays nothing for a profile that was never seen", function()
+			local elapsed, updated = Profile.consumeOfflineWindow(profileLastSeenAt(0), 1_700_000_000)
+
+			expect(elapsed).toBe(0)
+			expect(updated.lastSeen).toBe(1_700_000_000)
+		end)
+
+		it("pays nothing when the clock moved backwards", function()
+			local elapsed, updated = Profile.consumeOfflineWindow(profileLastSeenAt(5000), 1000)
+
+			expect(elapsed).toBe(0)
+			-- and re-anchors, so the next window is measured from the new now
+			expect(updated.lastSeen).toBe(1000)
+		end)
+
+		--[[
+			A nonsense clock reading must not reach the save: stamping NaN
+			would poison every window calculation that follows.
+		]]
+		it("refuses to stamp a NaN clock", function()
+			local elapsed, updated = Profile.consumeOfflineWindow(profileLastSeenAt(1000), 0 / 0)
+
+			expect(elapsed).toBe(0)
+			expect(updated.lastSeen).toBe(1000)
+		end)
+
+		it("refuses to stamp an infinite clock", function()
+			local _, updated = Profile.consumeOfflineWindow(profileLastSeenAt(1000), math.huge)
+			expect(updated.lastSeen).toBe(1000)
+		end)
+
+		--[[
+			The original is left untouched so a caller that fails partway
+			through crediting does not leave a consumed window behind.
+		]]
+		it("does not mutate the profile it was given", function()
+			local original = profileLastSeenAt(1000)
+			Profile.consumeOfflineWindow(original, 4600)
+
+			expect(original.lastSeen).toBe(1000)
+		end)
+	end)
+
 	describe("load: unknown upgrades", function()
 		--[[
 			An upgrade can be pulled from the config temporarily. Deleting the

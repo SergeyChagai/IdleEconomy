@@ -210,6 +210,55 @@ local function finalize(raw: { [string]: any }, upgradeIds: { string }): Profile
 	}
 end
 
+--[[ Offline window ]]
+
+--[[
+	Consume the offline window: report how long the player was away and stamp
+	`lastSeen`, so the same stretch of time can never be paid out twice.
+
+	Splitting "how long were they away" from "what is that worth" is
+	deliberate. The payout amount is `Balance.offlineEarnings`, which depends
+	on rates, caps and gamepasses. The double-credit guard depends on none of
+	that -- it is purely about consuming the window -- so it lives here and is
+	tested on its own. A retry, a rejoin or a duplicated load then cannot pay
+	twice, whatever the economy config happens to be.
+
+	Returns (elapsedSeconds, updatedProfile). The profile is copied rather
+	than mutated: the caller decides when to adopt the new state, and a
+	half-applied credit must not leave a stamped `lastSeen` behind.
+
+	Zero elapsed is returned, and no payout is due, when:
+	  * lastSeen is 0 -- a new or freshly migrated profile. "Unknown" must not
+	    be read as "away since 1970";
+	  * `now` is before lastSeen -- the clock moved backwards. The window is
+	    re-anchored to `now` instead of producing a negative duration.
+]]
+function Profile.consumeOfflineWindow(profile: Profile, now: number): (number, Profile)
+	local updated: Profile = {
+		version = profile.version,
+		coins = profile.coins,
+		levels = profile.levels,
+		prestigeCount = profile.prestigeCount,
+		lifetimeEarned = profile.lifetimeEarned,
+		lastSeen = profile.lastSeen,
+	}
+
+	-- A nonsense clock reading must not be written into the save: stamping it
+	-- would corrupt every future window calculation
+	if type(now) ~= "number" or now ~= now or now == math.huge or now == -math.huge then
+		return 0, updated
+	end
+
+	local lastSeen = profile.lastSeen
+	updated.lastSeen = now
+
+	if lastSeen <= 0 or now <= lastSeen then
+		return 0, updated
+	end
+
+	return now - lastSeen, updated
+end
+
 --[[ Entry point ]]
 
 --[[
