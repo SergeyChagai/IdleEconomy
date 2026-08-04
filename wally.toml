@@ -12,3 +12,10 @@ exclude = ["**"]
 # range: on a one-developer project an unexpected dependency bump is a lost
 # evening, not a saved minute.
 Knit = "sleitnick/knit@1.7.0"
+
+[server-dependencies]
+# DataStore persistence with session locking. Declared as a server dependency
+# because the package itself is realm = "server": save data must never be
+# replicated to clients, and Wally enforces that by putting it in
+# ServerPackages instead of Packages.
+ProfileStore = "lm-loleris/profilestore@1.0.3"

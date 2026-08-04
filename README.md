@@ -21,6 +21,12 @@ Dependencies are managed by [Wally](https://wally.run):
 wally install
 ```
 
+> **Stop `rojo serve` before running `wally install`.** Wally rewrites the
+> whole `Packages/` tree at once, and Rojo's incremental file watcher does not
+> survive it: in practice it has both silently half-synced the tree and
+> crashed outright on a path that vanished mid-watch. Restart `rojo serve`
+> afterwards.
+
 ---
 
 ## Architecture
